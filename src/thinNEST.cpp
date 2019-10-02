@@ -38,7 +38,7 @@ int main(int argc, char** argv)
 
     unsigned long int numEvents = 0;
     double exposure=-1;
-    string type = "-1";
+    string type = "NR";
     string detectorName = "-1";
     string spectrumFilename = "-1";
     string analysisFilename = "-1";
@@ -80,9 +80,6 @@ int main(int argc, char** argv)
 
         switch (iarg)
         {
-            case 'h':
-                std::cout << "You hit help" << std::endl;
-                break;
             case 'm':
                 migdal = 1;
                 break;
@@ -132,8 +129,28 @@ int main(int argc, char** argv)
             case 'o':
                 outputFilename = optarg;
                 break;
+            case '?':
+            case 'h':
+                cout << "Usage: thinNEST [options]\n"
+                     << "A lightweight and flexible code for running NEST simulations\n\n"
+                     << "Options:\n"
+                     << "\t-v, --verbose\tverbose output\n"
+                     << "\t-t, --timing\tinclude s2-width calculation\n"
+                     << "\t-m, --migdal\tinclude the migdal effect for NR\n"
+                     << "\t-n, --numEvents N\tsimulate N events\n"
+                     << "\t-a, --analysis analysis_file\n"
+                     << "\t-d, --detector detector_file\n"
+                     << "\t-s, --spectrum {NR,ER,file=spectrum_file}\n"
+                     << "\t-e, --eMin X\tstarts the spectrum at X keV, defaults to -1 (min in spectrum file)\n"
+                     << "\t-E, --eMax X\tends the spectrum at X keV, defaults to -1 (max in spectrum file)\n"
+                     << "\t-o, --output output_file, defaults to stdout\n"
+                     << "\t-f, --field V\tset E-field to V volts/cm\n"
+                     << "\t-r, --seed S\tuse the random seed S, defaults to sys clock\n";               
+                return 0;
         }
+
     }
+        
     if (seed == -1)
         RandomGen::rndm()->SetSeed(time(NULL));
     else
