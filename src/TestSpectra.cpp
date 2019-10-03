@@ -578,12 +578,11 @@ TestSpectra::SPLINE_spectrum_prep TestSpectra::SPLINE_read_spectrum_file(const s
       RFF.open("spectra/"+filename,ifstream::in);
       if(!RFF) 
       {
-          std::cout << "file not found for spline " << filename << std::endl;
+          std::cerr << "file not found for spline " << filename << std::endl;
           assert(0);
       }
     }
     RFF >> spectrum.type;
-    std::cout << "reading " << spectrum.type << " spectrum from " << filename << std::endl;
     
     double* Er = new double[10000]();
     double* Rate = new double[10000]();

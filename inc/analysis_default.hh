@@ -2,6 +2,9 @@
 // Verbosity flag (for limiting output to S1/S2; nothing else
 bool verbosity = false;
 
+// controls whether quanta is output or just S1/S2
+bool outputQuanta = false;
+
 // General parameters of importance changing global behavior
 bool MCtruthE = false;    // false means reconstructed energy
 bool MCtruthPos = true;  // false means reconstructed position

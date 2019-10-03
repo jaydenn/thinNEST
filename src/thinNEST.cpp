@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     size_t loc;
     int index;
     double g2, pos_x, pos_y, pos_z, r, phi, driftTime, field, vD=0.,
-      vD_middle = 0., atomNum = 0, massNum = 0, keVee = 0.0, signal1, signal2;
+      vD_middle = 0., atomNum = 0, massNum = 0, signal1, signal2;
     YieldResult yieldsMax;
 
     unsigned long int numEvents = 0;
@@ -50,25 +50,28 @@ int main(int argc, char** argv)
     double fPos = -1;
     int migdal=0;
     int seed=-1; 
-    int doCalibration = false;
+    //int doCalibration = false;
+    int verbose=0;
+    int outputQuanta=0;
 
     const struct option longopts[] =
     {
-        {"help",      no_argument,        0, 'h'},
-        {"migdal",    no_argument,        0, 'm'},
-        {"calibrate", no_argument,        0, 'c'},
-        {"timing",    no_argument,        0, 't'},
-        {"verbose",   no_argument,        0, 'v'},
-        {"numEvents", required_argument,  0, 'n'},
-        {"exposure",  required_argument,  0, 'N'},
-        {"spectra",   required_argument,  0, 's'},
-        {"detector",  required_argument,  0, 'd'},
-        {"analysis",  required_argument,  0, 'a'},
-        {"eMin",      required_argument,  0, 'e'},
-        {"eMax",      required_argument,  0, 'E'},
-        {"field",     required_argument,  0, 'f'},
-        {"seed",      required_argument,  0, 'r'},
-        {"output",    required_argument,  0, 'o'},
+        {"help",        no_argument,        0, 'h'},
+        {"migdal",      no_argument,        0, 'm'},
+        //{"calibrate",   no_argument,        0, 'c'},
+        {"timing",      no_argument,        0, 't'},
+        {"verbose",     no_argument,        0, 'v'},
+        {"outputQuanta",no_argument,        0, 'q'},
+        {"numEvents",   required_argument,  0, 'n'},
+        {"exposure",    required_argument,  0, 'N'},
+        {"spectra",     required_argument,  0, 's'},
+        {"detector",    required_argument,  0, 'd'},
+        {"analysis",    required_argument,  0, 'a'},
+        {"eMin",        required_argument,  0, 'e'},
+        {"eMax",        required_argument,  0, 'E'},
+        {"field",       required_argument,  0, 'f'},
+        {"seed",        required_argument,  0, 'r'},
+        {"output",      required_argument,  0, 'o'},
 
         {0,0,0,0},
     };
@@ -76,7 +79,7 @@ int main(int argc, char** argv)
     opterr=1;     //turn off getopt error message
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmtvn:N:s:f:d:e:E:f:s:a:o:", longopts, &index);
+        iarg = getopt_long(argc, argv, "hmtvqn:N:s:f:d:e:E:f:s:a:o:", longopts, &index);
 
         switch (iarg)
         {
@@ -87,11 +90,14 @@ int main(int argc, char** argv)
                 useTiming = 2;
                 break;
             case 'v':
-                verbosity = true;
+                verbose = 1;
                 break;
-            case 'c':
-                doCalibration = true;
+            case 'q':
+                outputQuanta = 1;
                 break;
+            //case 'c': 
+            //    doCalibration = true;
+            //    break;
             case 'n':
                 numEvents = atoi(optarg);
                 break;
@@ -135,6 +141,7 @@ int main(int argc, char** argv)
                      << "A lightweight and flexible code for running NEST simulations\n\n"
                      << "Options:\n"
                      << "\t-v, --verbose\tverbose output\n"
+                     << "\t-q, --outputQuanta\tcontrols what is saved in output\n"
                      << "\t-t, --timing\tinclude s2-width calculation\n"
                      << "\t-m, --migdal\tinclude the migdal effect for NR\n"
                      << "\t-n, --numEvents N\tsimulate N events\n"
@@ -156,7 +163,6 @@ int main(int argc, char** argv)
     else
         RandomGen::rndm()->SetSeed(seed);
 
-
     //open file for output
     ofstream outputFile; 
     if(outputFilename!="-1")
@@ -165,11 +171,13 @@ int main(int argc, char** argv)
 
     // detector parameter modifications
     setDetectorPars(detectorName, detector);
-    outStream << "using the " << (outputFilename!="-1" ? detectorName : "default" ) << " detector file\n";
+    outStream << "using the " << (detectorName!="-1" ? detectorName : "default" ) << " detector file\n";
+    
     // analysis parameter modifications
     setAnalysisPars(analysisFilename);
     outStream << "using the " << (analysisFilename!="-1" ? analysisFilename : "default" ) << " analysis file" << std::endl;
-
+    if (verbose==1) verbosity=true; //overright analysis with command line arg
+    
     // Construct NEST class using detector object
     NESTcalc n(detector);
     
@@ -184,12 +192,14 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    outStream << "spectrum type: " << (type=="file" ? "file ("+spectrumFilename+")" : type ) << endl;
     if (type == "file")
     {
-
+    
         spec.spline_spectrum_prep.xMin = eMin;
         spec.spline_spectrum_prep.xMax = eMax;
         spec.spline_spectrum_prep = spec.SPLINE_read_spectrum_file(spectrumFilename,spec.spline_spectrum_prep);
+        //eMin and eMax may be adjusted to account for the endpoints in the file        
         eMin = spec.spline_spectrum_prep.xMin;
         eMax = spec.spline_spectrum_prep.xMax;
 
@@ -218,10 +228,7 @@ int main(int argc, char** argv)
 
     }    
     else if (type == "NR" || type == "neutron" || type == "-1")
-    {
-       numEvents = atoi(argv[2]);
        type_num = NR;  //-1: default particle type is also NR
-    }    
     else if (type == "WIMP")
     {
         if (stof(argv[3]) < 0.44) 
@@ -420,7 +427,7 @@ int main(int argc, char** argv)
     int outputPars;
     if(useCorrected==1)
         corr="c";
-    if(verbosity == true)
+    if(outputQuanta == true)
     {
         outputPars=8;
         header.append("Nph\tNe-\tNhits\tNpe\tNeExt\t"+corr+"S1[phd]\t"+corr+"S2[phd]\t");
@@ -658,7 +665,7 @@ int main(int argc, char** argv)
                 }
                 quanta = n.GetQuanta(yields, rho, FreeParam);
                 if (spec.isLshell==1)
-                    quanta.electrons*=0.9;
+                    quanta.electrons*=0.9165;
             }
             else
             {
@@ -750,7 +757,7 @@ int main(int argc, char** argv)
                 if (yields.Lindhard > DBL_MIN && Nph > 0. && Ne > 0.) 
                 {
                     keV = (Nph + Ne) * Wq_eV * 1e-3 / yields.Lindhard;
-                    keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
+                    //keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
                                                         // both places, but won't account
                                                         // for density dependence
                 }
@@ -759,7 +766,7 @@ int main(int argc, char** argv)
             }
         
             outStream << keV << "\t\t";
-            if(verbosity == true)
+            if(outputQuanta == true)
                 outStream << quanta.photons << "\t" << quanta.electrons << "\t" << (int)scint[0] << "\t" << (int)scint[1] << "\t" << (int)scint2[0] << "\t" << signal1 << "\t\t" << signal2 << "\t\t";
             else
                 outStream << signal1 << "\t\t" << signal2 << "\t\t";
@@ -793,7 +800,6 @@ void setDetectorPars(string detectorName, Detector_def *detector)
     std::ifstream RFF;
 
     RFF.open(detectorName,ifstream::in);
- 
     if(!RFF)
     {
         RFF.open("detectors/"+detectorName,ifstream::in);
@@ -923,7 +929,6 @@ void setAnalysisPars(string analysisFilename)
                 std::istringstream is(lineElements[2]);
                 bool b;
                 is >> std::boolalpha >> b;
-                cout << lineElements[2] << endl;
                 if(lineElements[1] == "verbosity")
                     verbosity = b;
                 if(lineElements[1] == "MCtruthE")
