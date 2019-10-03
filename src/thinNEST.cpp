@@ -53,6 +53,8 @@ int main(int argc, char** argv)
     //int doCalibration = false;
     int verbose=0;
     int outputQuanta=0;
+    double wimpMass=10;
+    double wimpCS=1e-45;
 
     const struct option longopts[] =
     {
@@ -72,7 +74,7 @@ int main(int argc, char** argv)
         {"field",       required_argument,  0, 'f'},
         {"seed",        required_argument,  0, 'r'},
         {"output",      required_argument,  0, 'o'},
-
+        
         {0,0,0,0},
     };
     int iarg=0;
@@ -111,6 +113,12 @@ int main(int argc, char** argv)
                 {
                     spectrumFilename = type.substr(5,string::npos);
                     type = "file";
+                }
+                else if (type.substr(0,4) == "WIMP")
+                {
+                    wimpMass = stof(type.substr(5,type.find(",")-5));
+                    wimpCS = stod(type.substr(type.find(",")+1,10));
+                    type = "WIMP";
                 }
                 break;
             }            
@@ -231,17 +239,18 @@ int main(int argc, char** argv)
        type_num = NR;  //-1: default particle type is also NR
     else if (type == "WIMP")
     {
-        if (stof(argv[3]) < 0.44) 
+        if (wimpMass < 0.44) 
         {
             cerr << "WIMP mass too low, you're crazy!" << endl;
             return 0;
         }
     
         type_num = WIMP;
-        spec.wimp_spectrum_prep = spec.WIMP_prep_spectrum(stof(argv[3]), E_step);
+        spec.wimp_spectrum_prep = spec.WIMP_prep_spectrum(wimpMass, E_step);
         numEvents =
             RandomGen::rndm()->poisson_draw(spec.wimp_spectrum_prep.integral * 1.0 *
-                                            stof(argv[1]) * stof(argv[4]) / 1e-36);
+                                            exposure * wimpCS / 1e-36);
+        cout << "simulating " << numEvents << " events\n";
     }
     else if (type == "B8" || type == "Boron8" || type == "8Boron" ||
              type == "8B" || type == "Boron-8") 
@@ -288,10 +297,7 @@ int main(int argc, char** argv)
            type == "compton" || type == "electron" || type == "e-" ||
            type == "muon" || type == "MIP" || type == "LIP" || type == "mu" ||
            type == "mu-")
-    {
-        numEvents = atoi(argv[2]);
         type_num = beta;  // default electron recoil model
-    }
     else 
     {
         cerr << "UNRECOGNIZED PARTICLE TYPE!! VALID OPTIONS ARE:" << endl;
@@ -490,7 +496,7 @@ int main(int argc, char** argv)
                         keV = spec.DD_spectrum(eMin, eMax);
                         break;
                     case WIMP: 
-                        keV = spec.WIMP_spectrum(spec.wimp_spectrum_prep, stof(argv[3]));
+                        keV = spec.WIMP_spectrum(spec.wimp_spectrum_prep, wimpMass);
                         break;
                     default:
                         if (eMin < 0.) 
