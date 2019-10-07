@@ -53,17 +53,21 @@ int main(int argc, char** argv)
     //int doCalibration = false;
     int verbose=0;
     int outputQuanta=0;
+    int optimizeROI=0;
+    int doBinning=0;
     double wimpMass=10;
     double wimpCS=1e-45;
-
+    
     const struct option longopts[] =
     {
         {"help",        no_argument,        0, 'h'},
         {"migdal",      no_argument,        0, 'm'},
+        {"binned",      no_argument,        0, 'b'},
         //{"calibrate",   no_argument,        0, 'c'},
         {"timing",      no_argument,        0, 't'},
         {"verbose",     no_argument,        0, 'v'},
         {"outputQuanta",no_argument,        0, 'q'},
+        {"optimizeROI", no_argument,        0, 'O'},
         {"numEvents",   required_argument,  0, 'n'},
         {"exposure",    required_argument,  0, 'N'},
         {"spectra",     required_argument,  0, 's'},
@@ -81,7 +85,7 @@ int main(int argc, char** argv)
     opterr=1;     //turn off getopt error message
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmtvqn:N:s:f:d:e:E:f:s:a:o:", longopts, &index);
+        iarg = getopt_long(argc, argv, "hmbtvqOn:N:s:f:d:e:E:f:s:a:o:", longopts, &index);
 
         switch (iarg)
         {
@@ -91,6 +95,9 @@ int main(int argc, char** argv)
             case 't':
                 useTiming = 2;
                 break;
+            case 'b':
+                doBinning = 1;
+                break;        
             case 'v':
                 verbose = 1;
                 break;
@@ -100,6 +107,9 @@ int main(int argc, char** argv)
             //case 'c': 
             //    doCalibration = true;
             //    break;
+            case 'O':
+                optimizeROI = 1;
+                break;
             case 'n':
                 numEvents = atoi(optarg);
                 break;
@@ -186,6 +196,16 @@ int main(int argc, char** argv)
     outStream << "using the " << (analysisFilename!="-1" ? analysisFilename : "default" ) << " analysis file" << std::endl;
     if (verbose==1) verbosity=true; //overright analysis with command line arg
     
+    //set up array for binned data storage
+    int s1s2bins[numBinsS1][numBinsS2]={};
+    int indexS1,indexS2;
+    double s1binWidth = (maxS1-minS1)/numBinsS1;
+    double s2binWidth;
+    if(logS2==1)
+        s2binWidth = (log10(maxS2)-log10(minS2))/numBinsS2;
+    else
+        s2binWidth = (maxS2-minS2)/numBinsS2;
+
     // Construct NEST class using detector object
     NESTcalc n(detector);
     
@@ -422,31 +442,38 @@ int main(int argc, char** argv)
         }
     }
     if ((g1 * yieldsMax.PhotonYield) > (2. * maxS1) && eMin != eMax)
-        cerr
-            << "\nWARNING: Your energy maximum may be too high given your maxS1.\n";
+    {
+        if(optimizeROI==1)
+            maxS1 = g1 * yieldsMax.PhotonYield;
+        else
+            cerr << "\nWARNING: Your energy maximum may be too high given your maxS1.\n";
+    }
 
     cout << endl;
     double keV = -999.;
     vector<double> migdalE = {0,0};
     string corr="";
+    string unit="[phd]";
     string header="E[keV]\t\t";
     int outputPars;
     if(useCorrected==1)
         corr="c";
+    if(usePD==0)
+        unit="[phe]";
     if(outputQuanta == true)
     {
         outputPars=8;
-        header.append("Nph\tNe-\tNhits\tNpe\tNeExt\t"+corr+"S1[phd]\t"+corr+"S2[phd]\t");
+        header.append("Nph\tNe-\tNhits\tNpe\tNeExt\t"+corr+"S1"+unit+"\t"+corr+"S2"+unit+"\t");
     }
     else
     {
         outputPars=3;
-        header.append(corr+"S1[phd]\t\t"+corr+"S2[phd]\t\t");
+        header.append(corr+"S1"+unit+"\t"+corr+"S2"+unit+"\t");
     }
     if(spec.doMigdal == 1 && verbosity == true)
     {
         outputPars+=2;
-        header.append("migE[keV]\t\tmigP[keV]\t\t");
+        header.append("migE[keV]\tmigP[keV]\t");
     }
     if(useTiming==2)
     {
@@ -459,7 +486,10 @@ int main(int argc, char** argv)
         header.append("Etrue[keV]");
     }
 
-    outStream << header << "\n";
+    if(doBinning==1)
+        outStream <<  "Binned events, with bin spec: " << minS1 << " < "+corr+"S1"+unit+" < " << maxS1 <<", "<< minS2 << (logS2==1 ? " < log":" < ")+corr+"S2"+unit+" < " << maxS2 << "\n";
+    else 
+        outStream << header << "\n";
 
     unsigned long int numTrials=0;    
     for (unsigned long int j = 0; j < numEvents; j++) 
@@ -518,7 +548,7 @@ int main(int argc, char** argv)
                 }
             }
         }
-        if (spec.doMigdal && type_num == NR)
+        if (migdal == 1 && type_num == NR)
             migdalE = rand_migdalE(keV);  // Returns tuple of [electron energy, binding energy of shell]
 
 
@@ -659,7 +689,9 @@ int main(int argc, char** argv)
             {
                 yields = n.GetYields(type_num, keV, rho, field, double(massNum),
                                  double(atomNum), NuisParam);
-                if (spec.doMigdal && type_num == NR && migdalE[0] > 0)
+                if (spec.isLshell==1)
+                    quanta.electrons*=0.9165;
+                if (migdal == 1 && type_num == NR && migdalE[0] > 0)
                 {
                     yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
                                  double(atomNum), NuisParam);
@@ -670,8 +702,7 @@ int main(int argc, char** argv)
                     yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigGam.ElectronYield;
                 }
                 quanta = n.GetQuanta(yields, rho, FreeParam);
-                if (spec.isLshell==1)
-                    quanta.electrons*=0.9165;
+                
             }
             else
             {
@@ -723,25 +754,25 @@ int main(int argc, char** argv)
             n.GetS2(quanta.electrons, truthPos, smearPos, driftTime, vD, j, field,
                     useTiming, verbosity, wf_time, wf_amp, g2_params);
 
-        if(scint[3] > minS1 && scint2[5] > minS2)
-        {
-            if (usePD == 0 && fabs(scint[3]) > minS1 && scint[3] < maxS1)
-                signal1=scint[2+useCorrected];
-            else if (usePD == 1 && fabs(scint[5]) > minS1 && scint[5] < maxS1)
-                signal1=scint[4+useCorrected];
-            else if (usePD >= 2 && fabs(scint[7]) > minS1 && scint[7] < maxS1)
-                signal1=scint[6+useCorrected];
-            else
-                signal1=-999.;
 
-           
-            if (usePD == 0 && fabs(scint2[5]) > minS2 && scint2[5] < maxS2)
-                signal2=scint2[4+useCorrected];
-            else if (usePD >= 1 && fabs(scint2[7]) > minS2 && scint2[7] < maxS2)
-                signal2=scint2[6+useCorrected];  // no spike option for S2
-            else
-                signal2=-999.;
+        if (usePD == 0 && fabs(scint[3]) > minS1 && scint[3] < maxS1)
+            signal1=scint[2+useCorrected];
+        else if (usePD == 1 && fabs(scint[5]) > minS1 && scint[5] < maxS1)
+            signal1=scint[4+useCorrected];
+        else if (usePD >= 2 && fabs(scint[7]) > minS1 && scint[7] < maxS1)
+            signal1=scint[6+useCorrected];
+        else
+            signal1=-999.;
+        
+        if (usePD == 0 && fabs(scint2[5]) > minS2 && scint2[5] < maxS2)
+            signal2=scint2[4+useCorrected];
+        else if (usePD >= 1 && fabs(scint2[7]) > minS2 && scint2[7] < maxS2)
+            signal2=scint2[6+useCorrected];  // no spike option for S2
+        else
+            signal2=-999.;
          
+        if(signal1>0 && signal2 > 0)
+        {
             double keVtrue = keV;
             if (!MCtruthE)
             {
@@ -771,29 +802,52 @@ int main(int argc, char** argv)
                     keV = 0.;
             }
         
-            outStream << keV << "\t\t";
-            if(outputQuanta == true)
-                outStream << quanta.photons << "\t" << quanta.electrons << "\t" << (int)scint[0] << "\t" << (int)scint[1] << "\t" << (int)scint2[0] << "\t" << signal1 << "\t\t" << signal2 << "\t\t";
-            else
-                outStream << signal1 << "\t\t" << signal2 << "\t\t";
-            if(spec.doMigdal == 1 && verbosity == true)
-                outStream << migdalE[0] << "\t\t" << migdalE[1] << "\t\t";
-            if(useTiming==2)
-                outStream << scint2[9] << "\t\t";
-            if(MCtruthE == false && verbosity == true)
-                outStream << keVtrue << "\n";
-            else
-                outStream << "\n";
+            if(doBinning == 1)
+            {
+                indexS1 = (int)floor((signal1-minS1)/s1binWidth);
+                if(logS2 == 1)
+                    indexS2 = (int)floor((log10(signal2)-log10(minS2))/s2binWidth);
+                else
+                    indexS2 = (int)floor((signal2-minS2)/s2binWidth);
+                s1s2bins[indexS1][indexS2]+=1;
+            }
+            else            
+            {
+                outStream << keV << "\t\t";
+                if(outputQuanta == true)
+                    outStream << quanta.photons << "\t" << quanta.electrons << "\t" << (int)scint[0] << "\t" << (int)scint[1] << "\t" << (int)scint2[0] << "\t" << signal1 << "\t\t" << signal2 << "\t\t";
+                else
+                    outStream << signal1 << "\t\t" << signal2 << "\t\t";
+                if(spec.doMigdal == 1 && verbosity == true)
+                    outStream << migdalE[0] << "\t\t" << migdalE[1] << "\t\t";
+                if(useTiming==2)
+                    outStream << scint2[9] << "\t\t";
+                if(MCtruthE == false && verbosity == true)
+                    outStream << keVtrue << "\n";
+                else
+                    outStream << "\n";
+            }
 
         }
         else if( exposure == -1 )
             j--;
 
     }
+
     if( exposure == -1 && type == "file")
         outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
     else
         outStream << "exposure: " << exposure << endl;
+        
+    if(doBinning==1)
+    {
+        for(int i=0;i<numBinsS1;i++)
+        {
+            for(int j=0;j<numBinsS2;j++)
+                outStream << s1s2bins[i][j] << "\t";
+             outStream << "\n";     
+        }
+    }
 
     outputFile.close();
     return 1;
@@ -951,16 +1005,16 @@ void setAnalysisPars(string analysisFilename)
                     minS1 = stof(lineElements[3]);
                 if(lineElements[1] == "maxS1")
                     maxS1 = stof(lineElements[3]);
-                if(lineElements[1] == "numBins")
-                    numBins = stoi(lineElements[3]);
+                if(lineElements[1] == "numBinsS1")
+                    numBinsS1 = stoi(lineElements[3]);
+                if(lineElements[1] == "numBinsS2")
+                    numBinsS2 = stoi(lineElements[3]);
                 if(lineElements[1] == "minS2")
                     minS2 = stof(lineElements[3]);
                 if(lineElements[1] == "maxS2")
                     maxS2 = stof(lineElements[3]);
-                if(lineElements[1] == "logMax")
-                    logMax = stof(lineElements[3]);
-                if(lineElements[1] == "logMin")
-                    logMin = stof(lineElements[3]);
+                if(lineElements[1] == "logS2")
+                    logS2 = stof(lineElements[3]);
                 if(lineElements[1] == "z_step")
                     z_step = stof(lineElements[3]);
                 if(lineElements[1] == "E_step")

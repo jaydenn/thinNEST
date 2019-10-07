@@ -9,29 +9,23 @@ bool outputQuanta = false;
 bool MCtruthE = false;    // false means reconstructed energy
 bool MCtruthPos = true;  // false means reconstructed position
 
-int useTiming = 0;  // photon arrival times + pulse shapes (2=eTrains)
-// if 1 or 2 but verb off, then timing only saved as vectors
+int useTiming = 0;  // calculates S2 width, should rename this
 
-// 0 means PE, 1 means phd (PE/~1.2), 2 means spike count
-int usePD = 1;
-// band style: log(S2) with 1, while 0 means log(S2/S1)
+int usePD = 1; // 0 means PE, 1 means phd (PE/~1.2), 2 means spike count
 int useS2 = 1;  // xtra feature: 2 means S2 x-axis energy scale
 int useCorrected = 1;  //print corrected S1/S2 values
 
-double minS1 = 0.;  // units are controlled by the usePE flag
+double minS1 = 1.;  // units are controlled by the usePD flag
 // this is separate from S1 thresholds controlled by detector
 double maxS1 = 1e3;
-int numBins = 35;
+int numBinsS1 = 100;
 
-// for efficiency calculation
 // minS2 need not match S2 threshold in detector.hh
 // you can treat as trigger vs. analysis thresholds
-double minS2 = 0.0;
+double minS2 = 100.0;
 double maxS2 = 1e9;
-
-// log(S2/S1) or log(S2) admitted into analysis incl. limit
-double logMax = 3.6;
-double logMin = 0.6;
+int numBinsS2 = 100;
+int logS2 = 0;
 
 // some numbers for fine-tuning the speed vs. the accuracy
 double z_step = 100.0;  // mm, for integrating non-uniform field
