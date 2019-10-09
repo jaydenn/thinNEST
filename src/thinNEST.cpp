@@ -55,6 +55,7 @@ int main(int argc, char** argv)
     int outputQuanta=0;
     int optimizeROI=0;
     int doBinning=0;
+    int usePosition=0;
     double wimpMass=10;
     double wimpCS=1e-45;
     
@@ -67,6 +68,7 @@ int main(int argc, char** argv)
         {"timing",      no_argument,        0, 't'},
         {"verbose",     no_argument,        0, 'v'},
         {"outputQuanta",no_argument,        0, 'q'},
+        {"position",    no_argument,        0, 'p'},
         {"optimizeROI", no_argument,        0, 'O'},
         {"numEvents",   required_argument,  0, 'n'},
         {"exposure",    required_argument,  0, 'N'},
@@ -85,7 +87,7 @@ int main(int argc, char** argv)
     opterr=1;     //turn off getopt error message
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmbtvqOn:N:s:f:d:e:E:f:s:a:o:", longopts, &index);
+        iarg = getopt_long(argc, argv, "hmbtvpqOn:N:s:f:d:e:E:f:s:a:o:", longopts, &index);
 
         switch (iarg)
         {
@@ -103,6 +105,9 @@ int main(int argc, char** argv)
                 break;
             case 'q':
                 outputQuanta = 1;
+                break;
+            case 'p':
+                usePosition = 1;
                 break;
             //case 'c': 
             //    doCalibration = true;
@@ -197,7 +202,9 @@ int main(int argc, char** argv)
     if (verbose==1) verbosity=true; //overright analysis with command line arg
     
     //set up array for binned data storage
-    int s1s2bins[numBinsS1][numBinsS2]={};
+    int** s1s2bins = new int*[numBinsS1];
+    for(int i = 0; i < numBinsS1; ++i)
+        s1s2bins[i] = new int[numBinsS2]();
     int indexS1,indexS2;
     double s1binWidth = (maxS1-minS1)/numBinsS1;
     double s2binWidth;
@@ -479,6 +486,11 @@ int main(int argc, char** argv)
     {
         outputPars+=1;
         header.append("t80[ns]\t\t");
+    }
+    if(usePosition==1)
+    {
+        outputPars+=2;
+        header.append("r[mm]\tz[mm]\t\t");
     }
     if(MCtruthE == false && verbosity == true)
     {
@@ -822,6 +834,8 @@ int main(int argc, char** argv)
                     outStream << migdalE[0] << "\t\t" << migdalE[1] << "\t\t";
                 if(useTiming==2)
                     outStream << scint2[9] << "\t\t";
+                if(usePosition==1)
+                    outStream << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
                 if(MCtruthE == false && verbosity == true)
                     outStream << keVtrue << "\n";
                 else
