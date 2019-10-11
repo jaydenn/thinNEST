@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     size_t loc;
     int index;
     double g2, pos_x, pos_y, pos_z, r, phi, driftTime, field, vD=0.,
-      vD_middle = 0., atomNum = 0, massNum = 0, signal1, signal2;
+      vD_middle = 0., atomNum = 0, massNum = 0, signal1, signal2, smearRad;
     YieldResult yieldsMax;
 
     unsigned long int numEvents = 0;
@@ -46,7 +46,7 @@ int main(int argc, char** argv)
     double eMin = -1;
     double eMax = -1;   
     double inField = -1;
-    position = -1;
+    position = "-1";
     double fPos = -1;
     int migdal=0;
     int seed=-1; 
@@ -61,25 +61,26 @@ int main(int argc, char** argv)
     
     const struct option longopts[] =
     {
-        {"help",        no_argument,        0, 'h'},
-        {"migdal",      no_argument,        0, 'm'},
-        {"binned",      no_argument,        0, 'b'},
+        {"help",         no_argument,        0, 'h'},
+        {"migdal",       no_argument,        0, 'm'},
+        {"binned",       no_argument,        0, 'b'},
         //{"calibrate",   no_argument,        0, 'c'},
-        {"timing",      no_argument,        0, 't'},
-        {"verbose",     no_argument,        0, 'v'},
-        {"outputQuanta",no_argument,        0, 'q'},
-        {"position",    no_argument,        0, 'p'},
-        {"optimizeROI", no_argument,        0, 'O'},
-        {"numEvents",   required_argument,  0, 'n'},
-        {"exposure",    required_argument,  0, 'N'},
-        {"spectra",     required_argument,  0, 's'},
-        {"detector",    required_argument,  0, 'd'},
-        {"analysis",    required_argument,  0, 'a'},
-        {"eMin",        required_argument,  0, 'e'},
-        {"eMax",        required_argument,  0, 'E'},
-        {"field",       required_argument,  0, 'f'},
-        {"seed",        required_argument,  0, 'r'},
-        {"output",      required_argument,  0, 'o'},
+        {"timing",       no_argument,        0, 't'},
+        {"verbose",      no_argument,        0, 'v'},
+        {"outputQuanta", no_argument,        0, 'q'},
+        {"position",     no_argument,        0, 'p'},
+        {"optimizeROI",  no_argument,        0, 'O'},
+        {"numEvents",    required_argument,  0, 'n'},
+        {"exposure",     required_argument,  0, 'N'},
+        {"spectra",      required_argument,  0, 's'},
+        {"detector",     required_argument,  0, 'd'},
+        {"analysis",     required_argument,  0, 'a'},
+        {"eventPosition",required_argument,  0, 'P'},
+        {"eMin",         required_argument,  0, 'e'},
+        {"eMax",         required_argument,  0, 'E'},
+        {"field",        required_argument,  0, 'f'},
+        {"seed",         required_argument,  0, 'r'},
+        {"output",       required_argument,  0, 'o'},
         
         {0,0,0,0},
     };
@@ -87,7 +88,7 @@ int main(int argc, char** argv)
     opterr=1;     //turn off getopt error message
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmbtvpqOn:N:s:f:d:e:E:f:s:a:o:", longopts, &index);
+        iarg = getopt_long(argc, argv, "hmbtvpqOn:N:s:f:d:P:e:E:f:s:a:o:", longopts, &index);
 
         switch (iarg)
         {
@@ -142,6 +143,10 @@ int main(int argc, char** argv)
                 break;
             case 'd':
                 detectorName = optarg;
+                break;
+            case 'P':
+                position = optarg;
+                fPos=1;
                 break;
             case 'e':
                 eMin = atof(optarg);
@@ -202,11 +207,38 @@ int main(int argc, char** argv)
     if (verbose==1) verbosity=true; //overright analysis with command line arg
     
     //set up array for binned data storage
-    int** s1s2bins = new int*[numBinsS1];
-    for(int i = 0; i < numBinsS1; ++i)
-        s1s2bins[i] = new int[numBinsS2]();
-    int indexS1,indexS2;
+
+    int**** s1s2RZbins; int** s1s2bins;
+    //if(usePosition==1 && doBinning==1)
+    //{
+        s1s2RZbins = new int***[numBinsS1];
+        for(int i = 0; i < numBinsS1; ++i)
+        {
+            s1s2RZbins[i] = new int**[numBinsS2];
+            for(int j = 0; j < numBinsS2; ++j)
+            {
+                s1s2RZbins[i][j] = new int*[numBinsR];
+                for(int k = 0; k < numBinsR; ++k)
+                {
+                     s1s2RZbins[i][j][k] = new int[numBinsZ]();
+                }
+            }
+        }
+
+    //}
+    //else if(doBinning==1 && usePosition==0)
+    //{
+        s1s2bins = new int*[numBinsS1]();
+        for(int i = 0; i < numBinsS1; ++i)
+            s1s2bins[i] = new int[numBinsS2]();
+    //}
+
+    int indexS1,indexS2,indexZ,indexR;
     double s1binWidth = (maxS1-minS1)/numBinsS1;
+    maxZ*=detector->get_TopDrift();minZ*=detector->get_TopDrift();
+    double ZbinWidth = (maxZ-minZ)/numBinsZ;
+    maxR*=detector->get_radmax(); minR*=detector->get_radmax();
+    double RbinWidth = (maxR-minR)/numBinsR;
     double s2binWidth;
     if(logS2==1)
         s2binWidth = (log10(maxS2)-log10(minS2))/numBinsS2;
@@ -363,6 +395,8 @@ int main(int argc, char** argv)
         init_Znl();
         calcMigdalSpectrum(&(spec.spline_spectrum_prep)); //optional
     }
+    else
+        spec.doMigdal = 0;
 
     if (type_num == Kr83m)
     {
@@ -753,6 +787,7 @@ int main(int argc, char** argv)
             xySmeared = n.xyResolution(pos_x, pos_y, Nphd_S2);
             smearPos[0] = xySmeared[0];
             smearPos[1] = xySmeared[1];
+            smearRad = sqrt(pow(smearPos[0],2) + pow(smearPos[1],2));
         }
 
         vector<long int> wf_time;
@@ -782,8 +817,8 @@ int main(int argc, char** argv)
             signal2=scint2[6+useCorrected];  // no spike option for S2
         else
             signal2=-999.;
-         
-        if(signal1>0 && signal2 > 0)
+
+        if(signal1>0 && signal2 > 0 && smearRad<detector->get_radmax())
         {
             double keVtrue = keV;
             if (!MCtruthE)
@@ -813,7 +848,6 @@ int main(int argc, char** argv)
                 else
                     keV = 0.;
             }
-        
             if(doBinning == 1)
             {
                 indexS1 = (int)floor((signal1-minS1)/s1binWidth);
@@ -821,7 +855,15 @@ int main(int argc, char** argv)
                     indexS2 = (int)floor((log10(signal2)-log10(minS2))/s2binWidth);
                 else
                     indexS2 = (int)floor((signal2-minS2)/s2binWidth);
-                s1s2bins[indexS1][indexS2]+=1;
+
+                if(usePosition==1)
+                {
+                    indexR = (int)floor( (sqrt(pow(smearPos[0],2)+pow(smearPos[1],2))-minR)/RbinWidth);
+                    indexZ = (int)floor((smearPos[2]-minZ)/ZbinWidth);
+                    s1s2RZbins[indexS1][indexS2][indexR][indexZ]+=1;
+                }
+                else
+                    s1s2bins[indexS1][indexS2]+=1;
             }
             else            
             {
@@ -853,7 +895,21 @@ int main(int argc, char** argv)
     else
         outStream << "exposure: " << exposure << endl;
         
-    if(doBinning==1)
+    if(doBinning==1 && usePosition==1)
+    {
+        for(int i=0;i<numBinsS1;i++)
+        {
+            for(int j=0;j<numBinsS2;j++)
+            {
+                for(int k=0;k<numBinsR;k++)
+                {    
+                    for(int l=0;l<numBinsZ;l++)
+                        outStream << i << j << k << l << "\t" << s1s2bins[i][j] << "\n";
+                }                
+            }
+        }
+    }
+    else if(doBinning==1 && usePosition==0)
     {
         for(int i=0;i<numBinsS1;i++)
         {

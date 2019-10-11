@@ -27,6 +27,14 @@ double maxS2 = 1e9;
 int numBinsS2 = 100;
 int logS2 = 0;
 
+//spatial bins as a fraction of size defined in detector file
+double minR=0;
+double maxR=1;
+int numBinsR=3;
+double minZ=0;
+double maxZ=1;
+int numBinsZ=5;
+
 // some numbers for fine-tuning the speed vs. the accuracy
 double z_step = 100.0;  // mm, for integrating non-uniform field
 double E_step = 2.0;  // keV, for integrating WIMP spectrum
