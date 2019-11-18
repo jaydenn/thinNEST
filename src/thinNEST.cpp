@@ -53,6 +53,7 @@ int main(int argc, char** argv)
     //int doCalibration = false;
     int verbose=0;
     int outputQuanta=0;
+    int outputLindhard=0;
     int optimizeROI=0;
     int doBinning=0;
     int usePosition=0;
@@ -68,6 +69,7 @@ int main(int argc, char** argv)
         {"timing",       no_argument,        0, 't'},
         {"verbose",      no_argument,        0, 'v'},
         {"outputQuanta", no_argument,        0, 'q'},
+        {"outLindhard",  no_argument,        0, 'l'},
         {"position",     no_argument,        0, 'p'},
         {"optimizeROI",  no_argument,        0, 'O'},
         {"numEvents",    required_argument,  0, 'n'},
@@ -88,7 +90,7 @@ int main(int argc, char** argv)
     opterr=1;     //turn off getopt error message
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmbtvpqOn:N:s:f:d:P:e:E:f:s:a:o:", longopts, &index);
+        iarg = getopt_long(argc, argv, "hmbtvpqlOn:N:s:f:d:P:e:E:f:s:a:o:", longopts, &index);
 
         switch (iarg)
         {
@@ -106,6 +108,9 @@ int main(int argc, char** argv)
                 break;
             case 'q':
                 outputQuanta = 1;
+                break;
+            case 'l':
+                outputLindhard = 1;
                 break;
             case 'p':
                 usePosition = 1;
@@ -208,30 +213,23 @@ int main(int argc, char** argv)
     
     //set up array for binned data storage
 
-    int**** s1s2RZbins; int** s1s2bins;
-    //if(usePosition==1 && doBinning==1)
-    //{
-        s1s2RZbins = new int***[numBinsS1];
-        for(int i = 0; i < numBinsS1; ++i)
+    int**** s1s2RZbins;
+    if(usePosition!=1 && doBinning==1)
+        numBinsZ = numBinsR = 1;
+ 
+    s1s2RZbins = new int***[numBinsS1];
+    for(int i = 0; i < numBinsS1; ++i)
+    {
+        s1s2RZbins[i] = new int**[numBinsS2];
+        for(int j = 0; j < numBinsS2; ++j)
         {
-            s1s2RZbins[i] = new int**[numBinsS2];
-            for(int j = 0; j < numBinsS2; ++j)
+            s1s2RZbins[i][j] = new int*[numBinsR];
+            for(int k = 0; k < numBinsR; ++k)
             {
-                s1s2RZbins[i][j] = new int*[numBinsR];
-                for(int k = 0; k < numBinsR; ++k)
-                {
-                     s1s2RZbins[i][j][k] = new int[numBinsZ]();
-                }
+                 s1s2RZbins[i][j][k] = new int[numBinsZ]();
             }
         }
-
-    //}
-    //else if(doBinning==1 && usePosition==0)
-    //{
-        s1s2bins = new int*[numBinsS1]();
-        for(int i = 0; i < numBinsS1; ++i)
-            s1s2bins[i] = new int[numBinsS2]();
-    //}
+    }
 
     int indexS1,indexS2,indexZ,indexR;
     double s1binWidth = (maxS1-minS1)/numBinsS1;
@@ -529,7 +527,12 @@ int main(int argc, char** argv)
     if(MCtruthE == false && verbosity == true)
     {
         outputPars+=1;
-        header.append("Etrue[keV]");
+        header.append("Etrue[keV]\t");
+    }
+    if(outputLindhard == 1)
+    {
+        outputPars+=1;
+        header.append("lindhard");
     }
 
     if(doBinning==1)
@@ -735,6 +738,10 @@ int main(int argc, char** argv)
             {
                 yields = n.GetYields(type_num, keV, rho, field, double(massNum),
                                  double(atomNum), NuisParam);
+                if(type_num == beta)
+                {
+                    yields.ElectronYield=floor(.8*yields.ElectronYield);
+                }
                 if (spec.isLshell==1)
                     quanta.electrons*=0.9165;
                 if (migdal == 1 && type_num == NR && migdalE[0] > 0)
@@ -784,7 +791,7 @@ int main(int argc, char** argv)
         if (!MCtruthPos && Nphd_S2 > PHE_MIN) 
         {
             vector<double> xySmeared(2);
-            xySmeared = n.xyResolution(pos_x, pos_y, Nphd_S2);
+            xySmeared   = n.xyResolution(pos_x, pos_y, Nphd_S2);
             smearPos[0] = xySmeared[0];
             smearPos[1] = xySmeared[1];
             smearRad = sqrt(pow(smearPos[0],2) + pow(smearPos[1],2));
@@ -863,7 +870,7 @@ int main(int argc, char** argv)
                     s1s2RZbins[indexS1][indexS2][indexR][indexZ]+=1;
                 }
                 else
-                    s1s2bins[indexS1][indexS2]+=1;
+                    s1s2RZbins[indexS1][indexS2][0][0]+=1;
             }
             else            
             {
@@ -879,7 +886,9 @@ int main(int argc, char** argv)
                 if(usePosition==1)
                     outStream << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
                 if(MCtruthE == false && verbosity == true)
-                    outStream << keVtrue << "\n";
+                    outStream << keVtrue << "\t\t";
+                if(outputLindhard == 1)
+                    outStream << yields.Lindhard << "\n";                
                 else
                     outStream << "\n";
             }
@@ -895,28 +904,23 @@ int main(int argc, char** argv)
     else
         outStream << "exposure: " << exposure << endl;
         
-    if(doBinning==1 && usePosition==1)
+
+    if(doBinning==1)
     {
-        for(int i=0;i<numBinsS1;i++)
+        for(int l=0;l<numBinsZ;l++)
         {
-            for(int j=0;j<numBinsS2;j++)
+            for(int k=0;k<numBinsR;k++)
             {
-                for(int k=0;k<numBinsR;k++)
-                {    
-                    for(int l=0;l<numBinsZ;l++)
-                        outStream << i << j << k << l << "\t" << s1s2bins[i][j] << "\n";
-                }                
+                if(usePosition==1)
+                    outStream << "(rBin, ZBin) = (" << k << ", " << l << ")\n";
+                for(int i=0;i<numBinsS1;i++)
+                {
+                    for(int j=0;j<numBinsS2;j++)
+                        outStream << s1s2RZbins[i][j][k][l] << "\t";
+                    outStream << "\n";     
+                }
             }
-        }
-    }
-    else if(doBinning==1 && usePosition==0)
-    {
-        for(int i=0;i<numBinsS1;i++)
-        {
-            for(int j=0;j<numBinsS2;j++)
-                outStream << s1s2bins[i][j] << "\t";
-             outStream << "\n";     
-        }
+        }    
     }
 
     outputFile.close();

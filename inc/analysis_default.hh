@@ -11,7 +11,7 @@ bool MCtruthPos = true;  // false means reconstructed position
 
 int useTiming = 0;  // calculates S2 width, should rename this
 
-int usePD = 1; // 0 means PE, 1 means phd (PE/~1.2), 2 means spike count
+int usePD = 0; // 0 means PE, 1 means phd (PE/~1.2), 2 means spike count
 int useS2 = 1;  // xtra feature: 2 means S2 x-axis energy scale
 int useCorrected = 1;  //print corrected S1/S2 values
 
@@ -30,10 +30,10 @@ int logS2 = 0;
 //spatial bins as a fraction of size defined in detector file
 double minR=0;
 double maxR=1;
-int numBinsR=3;
+int numBinsR=2;
 double minZ=0;
 double maxZ=1;
-int numBinsZ=5;
+int numBinsZ=3;
 
 // some numbers for fine-tuning the speed vs. the accuracy
 double z_step = 100.0;  // mm, for integrating non-uniform field
