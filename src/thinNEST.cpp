@@ -32,8 +32,8 @@ int main(int argc, char** argv)
     string position, delimiter, token;
     size_t loc;
     int index;
-    double g2, pos_x, pos_y, pos_z, r, phi, driftTime, field, vD=0.,
-      vD_middle = 0., atomNum = 0, massNum = 0, signal1, signal2, smearRad;
+    double g2=0, pos_x=0, pos_y=0, pos_z=0, r=0, phi=0, driftTime=0, field=0, vD=0.,
+      vD_middle = 0., atomNum = 0, massNum = 0, signal1=0, signal2=0, smearRad=0;
     YieldResult yieldsMax;
 
     unsigned long int numEvents = 0;
@@ -231,7 +231,7 @@ int main(int argc, char** argv)
         }
     }
 
-    int indexS1,indexS2,indexZ,indexR;
+    int indexS1=0,indexS2=0,indexZ=0,indexR=0;
     double s1binWidth = (maxS1-minS1)/numBinsS1;
     maxZ*=detector->get_TopDrift();minZ*=detector->get_TopDrift();
     double ZbinWidth = (maxZ-minZ)/numBinsZ;
@@ -809,18 +809,18 @@ int main(int argc, char** argv)
                     useTiming, verbosity, wf_time, wf_amp, g2_params);
 
 
-        if (usePD == 0 && fabs(scint[3]) > minS1 && scint[3] < maxS1)
+        if (usePD == 0 && fabs(scint[2+useCorrected]) > minS1 && scint[2+useCorrected] < maxS1)
             signal1=scint[2+useCorrected];
-        else if (usePD == 1 && fabs(scint[5]) > minS1 && scint[5] < maxS1)
+        else if (usePD == 1 && fabs(scint[4+useCorrected]) > minS1 && scint[4+useCorrected] < maxS1)
             signal1=scint[4+useCorrected];
-        else if (usePD >= 2 && fabs(scint[7]) > minS1 && scint[7] < maxS1)
+        else if (usePD >= 2 && fabs(scint[6+useCorrected]) > minS1 && scint[6+useCorrected] < maxS1)
             signal1=scint[6+useCorrected];
         else
             signal1=-999.;
         
-        if (usePD == 0 && fabs(scint2[5]) > minS2 && scint2[5] < maxS2)
+        if (usePD == 0 && fabs(scint2[4+useCorrected]) > minS2 && scint2[4+useCorrected] < maxS2)
             signal2=scint2[4+useCorrected];
-        else if (usePD >= 1 && fabs(scint2[7]) > minS2 && scint2[7] < maxS2)
+        else if (usePD >= 1 && fabs(scint2[6+useCorrected]) > minS2 && scint2[6+useCorrected] < maxS2)
             signal2=scint2[6+useCorrected];  // no spike option for S2
         else
             signal2=-999.;
@@ -862,15 +862,13 @@ int main(int argc, char** argv)
                     indexS2 = (int)floor((log10(signal2)-log10(minS2))/s2binWidth);
                 else
                     indexS2 = (int)floor((signal2-minS2)/s2binWidth);
-
                 if(usePosition==1)
                 {
                     indexR = (int)floor( (sqrt(pow(smearPos[0],2)+pow(smearPos[1],2))-minR)/RbinWidth);
                     indexZ = (int)floor((smearPos[2]-minZ)/ZbinWidth);
-                    s1s2RZbins[indexS1][indexS2][indexR][indexZ]+=1;
                 }
-                else
-                    s1s2RZbins[indexS1][indexS2][0][0]+=1;
+                s1s2RZbins[indexS1][indexS2][indexR][indexZ]+=1;
+
             }
             else            
             {
@@ -903,7 +901,7 @@ int main(int argc, char** argv)
         outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
     else
         outStream << "exposure: " << exposure << endl;
-        
+    
 
     if(doBinning==1)
     {
