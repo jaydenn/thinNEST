@@ -285,7 +285,13 @@ int main(int argc, char** argv)
         
         if ( numEvents == 0 )
         {
-            numEvents = RandomGen::rndm()->poisson_draw( spec.spline_spectrum_prep.totRate * exposure);
+            double expectedN = spec.spline_spectrum_prep.totRate * exposure;
+            if (expectedN > 2.e9) //I thought it was supposed to be 4.29e9, but was getting problems at lower numbers
+            {
+                cout << "exposure expects more events than can be stored in an unsigned long int, reduce exposure\n";
+                return 0;
+            }            
+            numEvents = RandomGen::rndm()->poisson_draw(expectedN);
             cout << "simulating " << numEvents << " events (" << spec.spline_spectrum_prep.totRate * exposure << " expected from an exposure of " << exposure << ")\n";
         }
         else
@@ -901,7 +907,6 @@ int main(int argc, char** argv)
         outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
     else
         outStream << "exposure: " << exposure << endl;
-    
 
     if(doBinning==1)
     {
