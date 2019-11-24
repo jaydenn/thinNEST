@@ -52,6 +52,7 @@ int main(int argc, char** argv)
     int seed=-1; 
     //int doCalibration = false;
     int verbose=0;
+    int progress=0;
     int outputQuanta=0;
     int outputLindhard=0;
     int optimizeROI=0;
@@ -72,6 +73,7 @@ int main(int argc, char** argv)
         {"outLindhard",  no_argument,        0, 'l'},
         {"position",     no_argument,        0, 'p'},
         {"optimizeROI",  no_argument,        0, 'O'},
+        {"progress",     no_argument,        0, 'r'},
         {"numEvents",    required_argument,  0, 'n'},
         {"exposure",     required_argument,  0, 'N'},
         {"spectra",      required_argument,  0, 's'},
@@ -81,7 +83,7 @@ int main(int argc, char** argv)
         {"eMin",         required_argument,  0, 'e'},
         {"eMax",         required_argument,  0, 'E'},
         {"field",        required_argument,  0, 'f'},
-        {"seed",         required_argument,  0, 'r'},
+        {"seed",         required_argument,  0, 'S'},
         {"output",       required_argument,  0, 'o'},
         
         {0,0,0,0},
@@ -90,7 +92,7 @@ int main(int argc, char** argv)
     opterr=1;     //turn off getopt error message
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmbtvpqlOn:N:s:f:d:P:e:E:f:s:a:o:", longopts, &index);
+        iarg = getopt_long(argc, argv, "hmbtvpqlrOn:N:s:f:d:P:e:E:f:S:a:o:", longopts, &index);
 
         switch (iarg)
         {
@@ -123,6 +125,9 @@ int main(int argc, char** argv)
                 break;
             case 'n':
                 numEvents = atoi(optarg);
+                break;
+            case 'r':
+                progress = 1;
                 break;
             case 'N':
                 exposure = atof(optarg);
@@ -162,7 +167,7 @@ int main(int argc, char** argv)
             case 'f':
                 inField = atof(optarg);
                 break;  
-            case 'r':
+            case 'S':
                 seed = atoi(optarg);
                 break; 
             case 'o':
@@ -550,6 +555,8 @@ int main(int argc, char** argv)
     for (unsigned long int j = 0; j < numEvents; j++) 
     {
         numTrials++;
+        if(j % int(floor(numEvents/10)) == 0 && progress == 1)
+            cerr << floor(100*j/numEvents) << "% complete\n";
         if (eMin == eMax && eMin >= 0. && eMax > 0.) 
             keV = eMin;
         else 
