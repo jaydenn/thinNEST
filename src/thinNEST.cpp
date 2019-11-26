@@ -3,6 +3,7 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
+#include <omp.h>
 
 #include "NEST.hh"
 
@@ -31,9 +32,7 @@ int main(int argc, char** argv)
     // Fi, Fex, and 3 non-binomial recombination fluctuation parameters
     string position, delimiter, token;
     size_t loc;
-    int index;
-    double g2=0, pos_x=0, pos_y=0, pos_z=0, r=0, phi=0, driftTime=0, field=0, vD=0.,
-      vD_middle = 0., atomNum = 0, massNum = 0, signal1=0, signal2=0, smearRad=0;
+    double g2=0, atomNum = 0, massNum = 0;
     YieldResult yieldsMax;
 
     unsigned long int numEvents = 0;
@@ -90,9 +89,10 @@ int main(int argc, char** argv)
     };
     int iarg=0;
     opterr=1;     //turn off getopt error message
+    int longindex;
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmbtvpqlrOn:N:s:f:d:P:e:E:f:S:a:o:", longopts, &index);
+        iarg = getopt_long(argc, argv, "hmbtvpqlrOn:N:s:f:d:P:e:E:f:S:a:o:", longopts, &longindex);
 
         switch (iarg)
         {
@@ -195,7 +195,7 @@ int main(int argc, char** argv)
         }
 
     }
-        
+     
     if (seed == -1)
         RandomGen::rndm()->SetSeed(time(NULL));
     else
@@ -236,7 +236,6 @@ int main(int argc, char** argv)
         }
     }
 
-    int indexS1=0,indexS2=0,indexZ=0,indexR=0;
     double s1binWidth = (maxS1-minS1)/numBinsS1;
     maxZ*=detector->get_TopDrift();minZ*=detector->get_TopDrift();
     double ZbinWidth = (maxZ-minZ)/numBinsZ;
@@ -498,7 +497,19 @@ int main(int argc, char** argv)
         else
             cerr << "\nWARNING: Your energy maximum may be too high given your maxS1.\n";
     }
-
+    int vD_middle;
+    if (inField == -1.)
+    {
+        // build a vD table for non-uniform field, but if field varies in XY not
+        // just Z you need to do more coding
+        vTable = n.SetDriftVelocity_NonUniform(rho, z_step, 0, 0);
+        vD_middle = vTable[int(floor(centralZ / z_step + 0.5))];
+        // for ( int jj = 0; jj < vTable.size(); jj++ ) //DEBUG
+        // cerr << double(jj)*z_step << "\t" << vTable[jj] << endl;
+    }
+    else
+        vD_middle = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, inField);
+                          
     cout << endl;
     double keV = -999.;
     vector<double> migdalE = {0,0};
@@ -551,365 +562,360 @@ int main(int argc, char** argv)
     else 
         outStream << header << "\n";
 
-    unsigned long int numTrials=0;    
-    for (unsigned long int j = 0; j < numEvents; j++) 
+    unsigned long int numTrials=0;
+    unsigned long int numEventsCreated=0;
+    while ( numEventsCreated < numEvents )
     {
-        numTrials++;
-        if(j % int(floor(numEvents/10)) == 0 && progress == 1)
-            cerr << floor(100*j/numEvents) << "% complete\n";
-        if (eMin == eMax && eMin >= 0. && eMax > 0.) 
-            keV = eMin;
-        else 
+        
+        unsigned long int k = floor((numEvents-numEventsCreated)/omp_get_num_threads());
+        #pragma omp parallel for private(keV,numTrials,migdalE,token,loc) shared(numEventsCreated,s1s2RZbins)
+        for ( unsigned long int j = 0; j < k; j++) 
         {
-            //this returns a random recoil energy from the given spectra
-            if ( type == "file" )
-                keV = spec.file_spectrum_invCDF(spec.spline_spectrum_prep); //keV = spec.file_spectrum(spec.spline_spectrum_prep);
-            else
+            double signal1=0, signal2=0, smearRad=0,pos_x=0, pos_y=0, pos_z=0, r=0, phi=0, driftTime=0, field=0, vD=0;
+            int index=0,indexR=0,indexZ=0,indexS1=0,indexS2=0;
+            numTrials++;
+            //if(j % int(floor(numEvents/10)) == 0 && progress == 1)
+            //    cerr << floor(100*j/numEvents) << "% complete\n";
+            if (eMin == eMax && eMin >= 0. && eMax > 0.) 
+                keV = eMin;
+            else 
             {
-                switch (type_num)
+                //this returns a random recoil energy from the given spectra
+                if ( type == "file" )
+                    keV = spec.file_spectrum_invCDF(spec.spline_spectrum_prep); //keV = spec.file_spectrum(spec.spline_spectrum_prep);
+                else
                 {
-                    case CH3T:
-                        keV = spec.CH3T_spectrum(eMin, eMax);
-                        break;
-                    case C14:
-                        keV = spec.C14_spectrum(eMin, eMax);
-                        break;
-                    case B8:  // normalize this to ~3500 / 10-ton / year, for E-threshold of
-                              // 0.5 keVnr, OR 180 evts/t/yr/keV at 1 keV
-                        keV = spec.B8_spectrum(eMin, eMax);
-                        break;
-                    case AmBe:  // for ZEPLIN-III FSR from HA (Pal '98)
-                        keV = spec.AmBe_spectrum(eMin, eMax);
-                        break;
-                    case Cf:
-                        keV = spec.Cf_spectrum(eMin, eMax);
-                        break;
-                    case DD:
-                        keV = spec.DD_spectrum(eMin, eMax);
-                        break;
-                    case WIMP: 
-                        keV = spec.WIMP_spectrum(spec.wimp_spectrum_prep, wimpMass);
-                        break;
-                    default:
-                        if (eMin < 0.) 
-                            return 0;
-                        if (eMax > 0.)
-                            keV = eMin + (eMax - eMin) * RandomGen::rndm()->rand_uniform();
-                        else
-                        {
-                            // negative eMax signals to NEST that you want to use an
-                            // exponential energy spectrum profile
-                            if (eMin == 0.) 
-                                return 0;
-                            keV = 1e100;  // eMin will be used in place of eMax as the maximum
-                                          // energy in exponential scenario
-                            while (keV > eMin)
-                                keV = eMax * log(RandomGen::rndm()->rand_uniform());
-                        }
-                        break;
+                    switch (type_num)
+                    {
+                        case CH3T:
+                            keV = spec.CH3T_spectrum(eMin, eMax);
+                            break;
+                        case C14:
+                            keV = spec.C14_spectrum(eMin, eMax);
+                            break;
+                        case B8:  // normalize this to ~3500 / 10-ton / year, for E-threshold of
+                                  // 0.5 keVnr, OR 180 evts/t/yr/keV at 1 keV
+                            keV = spec.B8_spectrum(eMin, eMax);
+                            break;
+                        case AmBe:  // for ZEPLIN-III FSR from HA (Pal '98)
+                            keV = spec.AmBe_spectrum(eMin, eMax);
+                            break;
+                        case Cf:
+                            keV = spec.Cf_spectrum(eMin, eMax);
+                            break;
+                        case DD:
+                            keV = spec.DD_spectrum(eMin, eMax);
+                            break;
+                        case WIMP: 
+                            keV = spec.WIMP_spectrum(spec.wimp_spectrum_prep, wimpMass);
+                            break;
+                        default:
+                            if (eMin < 0.) 
+                                assert(0);
+                            if (eMax > 0.)
+                                keV = eMin + (eMax - eMin) * RandomGen::rndm()->rand_uniform();
+                            else
+                            {
+                                // negative eMax signals to NEST that you want to use an
+                                // exponential energy spectrum profile
+                                if (eMin == 0.) 
+                                    assert(0);
+                                keV = 1e100;  // eMin will be used in place of eMax as the maximum
+                                              // energy in exponential scenario
+                                while (keV > eMin)
+                                    keV = eMax * log(RandomGen::rndm()->rand_uniform());
+                            }
+                            break;
+                    }
                 }
             }
-        }
-        if (migdal == 1 && type_num == NR)
-            migdalE = rand_migdalE(keV);  // Returns tuple of [electron energy, binding energy of shell]
+            if (migdal == 1 && type_num == NR)
+                migdalE = rand_migdalE(keV);  // Returns tuple of [electron energy, binding energy of shell]
 
 
-        if (type_num != WIMP && type_num != B8 && eMax > 0.) 
-        {
-            if (keV > eMax) 
-                keV = eMax;
-            if (keV < eMin) 
-                keV = eMin;
-        }
-
-        Z_NEW:
-        if (fPos == -1.)  // -1 means default, random location mode
-        {  
-            pos_z = 0. +
-                  (detector->get_TopDrift() - 0.) *
-                      RandomGen::rndm()->rand_uniform();  // initial guess
-            r = detector->get_radius() * sqrt(RandomGen::rndm()->rand_uniform());
-            phi = 2. * M_PI * RandomGen::rndm()->rand_uniform();
-            pos_x = r * cos(phi);
-            pos_y = r * sin(phi);
-        } 
-        else
-        {
-            delimiter = ",";
-            loc = 0;
-            int i = 0;
-            while ((loc = position.find(delimiter)) != string::npos) 
+            if (type_num != WIMP && type_num != B8 && eMax > 0.) 
             {
-                token = position.substr(0, loc);
-                if (i == 0)
-                    pos_x = stof(token);
-                else
-                    pos_y = stof(token);
-                position.erase(0, loc + delimiter.length());
-                i++;
+                if (keV > eMax) 
+                    keV = eMax;
+                if (keV < eMin) 
+                    keV = eMin;
             }
-            pos_z = stof(position);
-            if (stof(position) == -1.)
-                pos_z =
-                    0. +
-                    (detector->get_TopDrift() - 0.) * RandomGen::rndm()->rand_uniform();
-            if (stof(token) == -999.) 
-            {
+
+            Z_NEW:
+            if (fPos == -1.)  // -1 means default, random location mode
+            {  
+                pos_z = 0. +
+                      (detector->get_TopDrift() - 0.) *
+                          RandomGen::rndm()->rand_uniform();  // initial guess
                 r = detector->get_radius() * sqrt(RandomGen::rndm()->rand_uniform());
                 phi = 2. * M_PI * RandomGen::rndm()->rand_uniform();
                 pos_x = r * cos(phi);
                 pos_y = r * sin(phi);
-            }
-            // if ( j == 0 ) { origX = pos_x; origY = pos_y; }
-        }
-
-        if (inField == -1.) 
-        {  // -1 means use poly position dependence
-            field = detector->FitEF(pos_x, pos_y, pos_z);
-        }
-        else
-            field = inField;  // no fringing
-
-        if (field < 0. || detector->get_E_gas() < 0.) 
-        {
-            cerr << "\nERROR: Neg field is not permitted. We don't simulate field "
-                  "dir (yet). Put in magnitude.\n";
-            return 0;
-        }
-        if (field == 0. || std::isnan(field))
-            cerr << "\nWARNING: A LITERAL ZERO (or undefined) FIELD MAY YIELD WEIRD "
-                  "RESULTS. USE A SMALL VALUE INSTEAD.\n";
-        if (field > 12e3 || detector->get_E_gas() > 17e3)
-            cerr << "\nWARNING: Your field is >12,000 V/cm. No data out here. Are "
-                  "you sure about this?\n";
-
-        if (j == 0 && vD_middle == 0.) 
-        {
-            if (inField == -1.)
-            {
-                // build a vD table for non-uniform field, but if field varies in XY not
-                // just Z you need to do more coding
-                vTable = n.SetDriftVelocity_NonUniform(rho, z_step, pos_x, pos_y);
-                vD_middle = vTable[int(floor(centralZ / z_step + 0.5))];
-                // for ( int jj = 0; jj < vTable.size(); jj++ ) //DEBUG
-                // cerr << double(jj)*z_step << "\t" << vTable[jj] << endl;
-            }
+            } 
             else
             {
-                vD_middle = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, inField);
-                vD = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, field);
+                delimiter = ",";
+                loc = 0;
+                int i = 0;
+                while ((loc = position.find(delimiter)) != string::npos) 
+                {
+                    token = position.substr(0, loc);
+                    if (i == 0)
+                        pos_x = stof(token);
+                    else
+                        pos_y = stof(token);
+                    position.erase(0, loc + delimiter.length());
+                    i++;
+                }
+                pos_z = stof(position);
+                if (stof(position) == -1.)
+                    pos_z =
+                        0. +
+                        (detector->get_TopDrift() - 0.) * RandomGen::rndm()->rand_uniform();
+                if (stof(token) == -999.) 
+                {
+                    r = detector->get_radius() * sqrt(RandomGen::rndm()->rand_uniform());
+                    phi = 2. * M_PI * RandomGen::rndm()->rand_uniform();
+                    pos_x = r * cos(phi);
+                    pos_y = r * sin(phi);
+                }
+                // if ( j == 0 ) { origX = pos_x; origY = pos_y; }
             }
-                  
-        }
-        if (inField == -1.) 
-        {
-            index = int(floor(pos_z / z_step + 0.5));
-            vD = vTable[index];
-        }
-        driftTime =
-            (detector->get_TopDrift() - pos_z) / vD;  // (mm - mm) / (mm / us) = us
-        if (inField != -1. &&
-            detector->get_dt_min() > (detector->get_TopDrift() - 0.) / vD &&
-            field >= FIELD_MIN) 
-        {
-            cerr << "ERROR: dt_min is too restrictive (too large)" << endl;
-            return 0;
-        }
-        if ((driftTime > detector->get_dt_max() ||
-             driftTime < detector->get_dt_min()) &&
-            (fPos == -1. || stof(position) == -1.) && field >= FIELD_MIN)
-            goto Z_NEW;
-        if (detector->get_dt_max() > (detector->get_TopDrift() - 0.) / vD && !j &&
-            field >= FIELD_MIN) 
-        {
-            cerr << "WARNING: dt_max is greater than max possible" << endl;
-        }
 
-        // The following should never happen: this is simply a just-in-case
-        // code-block dealing with user error
-        if (pos_z <= 0.) 
-        {
-            cerr << "ERROR: unphysically low Z coordinate (vertical axis of "
+            if (inField == -1.) 
+            {  // -1 means use poly position dependence
+                field = detector->FitEF(pos_x, pos_y, pos_z);
+            }
+            else
+                field = inField;  // no fringing
+
+            if (field < 0. || detector->get_E_gas() < 0.) 
+            {
+                cerr << "\nERROR: Neg field is not permitted. We don't simulate field "
+                      "dir (yet). Put in magnitude.\n";
+                assert(0);
+            }
+            if (field == 0. || std::isnan(field))
+                cerr << "\nWARNING: A LITERAL ZERO (or undefined) FIELD MAY YIELD WEIRD "
+                      "RESULTS. USE A SMALL VALUE INSTEAD.\n";
+            if (field > 12e3 || detector->get_E_gas() > 17e3)
+                cerr << "\nWARNING: Your field is >12,000 V/cm. No data out here. Are "
+                      "you sure about this?\n";
+            
+            if (inField == -1.) 
+            {
+                index = int(floor(pos_z / z_step + 0.5));
+                vD = vTable[index];
+            }
+            else
+                 vD = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, field);
+            driftTime =
+                (detector->get_TopDrift() - pos_z) / vD;  // (mm - mm) / (mm / us) = us
+            if (inField != -1. &&
+                detector->get_dt_min() > (detector->get_TopDrift() - 0.) / vD &&
+                field >= FIELD_MIN) 
+            {
+                cerr << "ERROR: dt_min is too restrictive (too large)" << endl;
+                assert(0);
+            }
+            if ((driftTime > detector->get_dt_max() ||
+                 driftTime < detector->get_dt_min()) &&
+                (fPos == -1. || stof(position) == -1.) && field >= FIELD_MIN)
+                goto Z_NEW;
+            if (detector->get_dt_max() > (detector->get_TopDrift() - 0.) / vD && !j &&
+                field >= FIELD_MIN) 
+            {
+                cerr << "WARNING: dt_max is greater than max possible" << endl;
+            }
+            // The following should never happen: this is simply a just-in-case
+            // code-block dealing with user error
+            if (pos_z <= 0.) 
+            {
+                cerr << "ERROR: unphysically low Z coordinate (vertical axis of "
+                          "detector) of "
+                       << pos_z << " mm" << endl;
+                assert(0);
+            }
+            if ((pos_z > (detector->get_TopDrift() + z_step) || driftTime < 0.0) &&
+                field >= FIELD_MIN) 
+            {
+                cerr << "ERROR: unphysically big Z coordinate (vertical axis of "
                       "detector) of "
                    << pos_z << " mm" << endl;
-            return 0;
-        }
-        if ((pos_z > (detector->get_TopDrift() + z_step) || driftTime < 0.0) &&
-            field >= FIELD_MIN) 
-        {
-            cerr << "ERROR: unphysically big Z coordinate (vertical axis of "
-                  "detector) of "
-               << pos_z << " mm" << endl;
-            return 0;
-        }
+                assert(0);
+            }
 
-        YieldResult yields;
-        YieldResult yieldsMigE;
-        YieldResult yieldsMigGam;
-        QuantaResult quanta;
-            if (keV > .001 * Wq_eV) 
+            YieldResult yields;
+            YieldResult yieldsMigE;
+            YieldResult yieldsMigGam;
+            QuantaResult quanta;
+                if (keV > .001 * Wq_eV) 
+                {
+                    yields = n.GetYields(type_num, keV, rho, field, double(massNum),
+                                     double(atomNum), NuisParam);
+                    if(type_num == beta)
+                    {
+                        yields.ElectronYield=floor(.8*yields.ElectronYield);
+                    }
+                    if (spec.isLshell==1)
+                        quanta.electrons*=0.9165;
+                    if (migdal == 1 && type_num == NR && migdalE[0] > 0)
+                    {
+                        yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
+                                     double(atomNum), NuisParam);
+                        yieldsMigGam = n.GetYields(gammaRay, migdalE[1], rho, field, double(massNum),
+                                     double(atomNum), NuisParam);
+                                        
+                        yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigGam.PhotonYield;
+                        yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigGam.ElectronYield;
+                    }
+                    quanta = n.GetQuanta(yields, rho, FreeParam);
+                    
+                }
+                else
+                {
+                    yields.PhotonYield = 0.;
+                    yields.ElectronYield = 0.;
+                    yields.ExcitonRatio = 0.;
+                    yields.Lindhard = 0.;
+                    yields.ElectricField = 0.;
+                    yields.DeltaT_Scint = 0.;
+                    if (spec.doMigdal && type_num == NR && migdalE[0] > 0)
+                    {
+                        yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
+                                     double(atomNum), NuisParam);
+                        yieldsMigGam = n.GetYields(gammaRay, migdalE[1], rho, field, double(massNum),
+                                     double(atomNum), NuisParam);
+                                        
+                        yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigGam.PhotonYield;
+                        yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigGam.ElectronYield;
+                    }
+                    quanta = n.GetQuanta(yields, rho, FreeParam);
+                    quanta.photons = 0;
+                    quanta.electrons = 0;
+                    quanta.ions = 0;
+                    quanta.excitons = 0;
+                }
+
+            // If we want the smeared positions (non-MC truth), then implement
+            // resolution function
+            double truthPos[3] = {pos_x, pos_y, pos_z};
+            double smearPos[3] = {pos_x, pos_y, pos_z};
+            double Nphd_S2 =
+                g2 * quanta.electrons * exp(-driftTime / detector->get_eLife_us());
+            if (!MCtruthPos && Nphd_S2 > PHE_MIN) 
             {
-                yields = n.GetYields(type_num, keV, rho, field, double(massNum),
-                                 double(atomNum), NuisParam);
-                if(type_num == beta)
+                vector<double> xySmeared(2);
+                xySmeared   = n.xyResolution(pos_x, pos_y, Nphd_S2);
+                smearPos[0] = xySmeared[0];
+                smearPos[1] = xySmeared[1];
+                smearRad = sqrt(pow(smearPos[0],2) + pow(smearPos[1],2));
+            }
+
+            vector<long int> wf_time;
+            vector<double> wf_amp;
+            vector<double> scint =
+                n.GetS1(quanta, truthPos, smearPos, vD, vD_middle, type_num, j, field,
+                        keV, useTiming, verbosity, wf_time, wf_amp);
+            if (truthPos[2] < detector->get_cathode()) 
+                quanta.electrons = 0;
+            vector<double> scint2 = 
+                n.GetS2(quanta.electrons, truthPos, smearPos, driftTime, vD, j, field,
+                        useTiming, verbosity, wf_time, wf_amp, g2_params);
+
+
+            if (usePD == 0 && fabs(scint[2+useCorrected]) > minS1 && scint[2+useCorrected] < maxS1)
+                signal1=scint[2+useCorrected];
+            else if (usePD == 1 && fabs(scint[4+useCorrected]) > minS1 && scint[4+useCorrected] < maxS1)
+                signal1=scint[4+useCorrected];
+            else if (usePD >= 2 && fabs(scint[6+useCorrected]) > minS1 && scint[6+useCorrected] < maxS1)
+                signal1=scint[6+useCorrected];
+            else
+                signal1=-999.;
+            
+            if (usePD == 0 && fabs(scint2[4+useCorrected]) > minS2 && scint2[4+useCorrected] < maxS2)
+                signal2=scint2[4+useCorrected];
+            else if (usePD >= 1 && fabs(scint2[6+useCorrected]) > minS2 && scint2[6+useCorrected] < maxS2)
+                signal2=scint2[6+useCorrected];  // no spike option for S2
+            else
+                signal2=-999.;
+
+            if(signal1>0 && signal2 > 0 && smearRad<detector->get_radmax())
+            {
+                #pragma omp atomic update
+                numEventsCreated++;
+                double keVtrue = keV;
+                if (!MCtruthE)
                 {
-                    yields.ElectronYield=floor(.8*yields.ElectronYield);
+                    double Nph, Ne;
+                    if (usePD == 0)
+                        Nph = fabs(scint[3]) / (g1 * (1. + detector->get_P_dphe()));
+                    else if (usePD == 1)
+                        Nph = fabs(scint[5]) / g1;
+                    else
+                        Nph = fabs(scint[7]) / g1;
+                    if (usePD == 0)
+                        Ne = fabs(scint2[5]) / (g2 * (1. + detector->get_P_dphe()));
+                    else
+                        Ne = fabs(scint2[7]) / g2;
+                    if (signal1 <= 0.)
+                        Nph = 0.;
+                    if (signal2 <= 0.) 
+                        Ne = 0.;
+                    if (yields.Lindhard > DBL_MIN && Nph > 0. && Ne > 0.) 
+                    {
+                        keV = (Nph + Ne) * Wq_eV * 1e-3 / yields.Lindhard;
+                        //keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
+                                                            // both places, but won't account
+                                                            // for density dependence
+                    }
+                    else
+                        keV = 0.;
                 }
-                if (spec.isLshell==1)
-                    quanta.electrons*=0.9165;
-                if (migdal == 1 && type_num == NR && migdalE[0] > 0)
+                if(doBinning == 1)
                 {
-                    yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
-                                 double(atomNum), NuisParam);
-                    yieldsMigGam = n.GetYields(gammaRay, migdalE[1], rho, field, double(massNum),
-                                 double(atomNum), NuisParam);
-                                    
-                    yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigGam.PhotonYield;
-                    yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigGam.ElectronYield;
+                    indexS1 = (int)floor((signal1-minS1)/s1binWidth);
+                    if(logS2 == 1)
+                        indexS2 = (int)floor((log10(signal2)-log10(minS2))/s2binWidth);
+                    else
+                        indexS2 = (int)floor((signal2-minS2)/s2binWidth);
+                    if(usePosition==1)
+                    {
+                        indexR = (int)floor( (sqrt(pow(smearPos[0],2)+pow(smearPos[1],2))-minR)/RbinWidth);
+                        indexZ = (int)floor((smearPos[2]-minZ)/ZbinWidth);
+                    }
+                    #pragma omp atomic update
+                    s1s2RZbins[indexS1][indexS2][indexR][indexZ]+=1;
+
                 }
-                quanta = n.GetQuanta(yields, rho, FreeParam);
+                else            
+                {
+                    stringstream tempString;
+                    tempString << keV << "\t\t";
+                    if(outputQuanta == true)
+                        tempString << quanta.photons << "\t" << quanta.electrons << "\t" << (int)scint[0] << "\t" << (int)scint[1] << "\t" << (int)scint2[0] << "\t" << signal1 << "\t\t" << signal2 << "\t\t";
+                    else
+                        tempString << signal1 << "\t\t" << signal2 << "\t\t";
+                    if(spec.doMigdal == 1 && verbosity == true)
+                        tempString << migdalE[0] << "\t\t" << migdalE[1] << "\t\t";
+                    if(useTiming==2)
+                        tempString << scint2[9] << "\t\t";
+                    if(usePosition==1)
+                        tempString << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
+                    if(MCtruthE == false && verbosity == true)
+                        tempString << keVtrue << "\t\t";
+                    if(outputLindhard == 1)
+                        tempString << yields.Lindhard << "\n";                
+                    else
+                        tempString << "\n";
+                    outStream << tempString.str();
+                }
                 
             }
-            else
-            {
-                yields.PhotonYield = 0.;
-                yields.ElectronYield = 0.;
-                yields.ExcitonRatio = 0.;
-                yields.Lindhard = 0.;
-                yields.ElectricField = 0.;
-                yields.DeltaT_Scint = 0.;
-                if (spec.doMigdal && type_num == NR && migdalE[0] > 0)
-                {
-                    yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
-                                 double(atomNum), NuisParam);
-                    yieldsMigGam = n.GetYields(gammaRay, migdalE[1], rho, field, double(massNum),
-                                 double(atomNum), NuisParam);
-                                    
-                    yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigGam.PhotonYield;
-                    yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigGam.ElectronYield;
-                }
-                quanta = n.GetQuanta(yields, rho, FreeParam);
-                quanta.photons = 0;
-                quanta.electrons = 0;
-                quanta.ions = 0;
-                quanta.excitons = 0;
-            }
-        
-        // If we want the smeared positions (non-MC truth), then implement
-        // resolution function
-        double truthPos[3] = {pos_x, pos_y, pos_z};
-        double smearPos[3] = {pos_x, pos_y, pos_z};
-        double Nphd_S2 =
-            g2 * quanta.electrons * exp(-driftTime / detector->get_eLife_us());
-        if (!MCtruthPos && Nphd_S2 > PHE_MIN) 
-        {
-            vector<double> xySmeared(2);
-            xySmeared   = n.xyResolution(pos_x, pos_y, Nphd_S2);
-            smearPos[0] = xySmeared[0];
-            smearPos[1] = xySmeared[1];
-            smearRad = sqrt(pow(smearPos[0],2) + pow(smearPos[1],2));
-        }
-
-        vector<long int> wf_time;
-        vector<double> wf_amp;
-        vector<double> scint =
-            n.GetS1(quanta, truthPos, smearPos, vD, vD_middle, type_num, j, field,
-                    keV, useTiming, verbosity, wf_time, wf_amp);
-        if (truthPos[2] < detector->get_cathode()) 
-            quanta.electrons = 0;
-        vector<double> scint2 = 
-            n.GetS2(quanta.electrons, truthPos, smearPos, driftTime, vD, j, field,
-                    useTiming, verbosity, wf_time, wf_amp, g2_params);
-
-
-        if (usePD == 0 && fabs(scint[2+useCorrected]) > minS1 && scint[2+useCorrected] < maxS1)
-            signal1=scint[2+useCorrected];
-        else if (usePD == 1 && fabs(scint[4+useCorrected]) > minS1 && scint[4+useCorrected] < maxS1)
-            signal1=scint[4+useCorrected];
-        else if (usePD >= 2 && fabs(scint[6+useCorrected]) > minS1 && scint[6+useCorrected] < maxS1)
-            signal1=scint[6+useCorrected];
-        else
-            signal1=-999.;
-        
-        if (usePD == 0 && fabs(scint2[4+useCorrected]) > minS2 && scint2[4+useCorrected] < maxS2)
-            signal2=scint2[4+useCorrected];
-        else if (usePD >= 1 && fabs(scint2[6+useCorrected]) > minS2 && scint2[6+useCorrected] < maxS2)
-            signal2=scint2[6+useCorrected];  // no spike option for S2
-        else
-            signal2=-999.;
-
-        if(signal1>0 && signal2 > 0 && smearRad<detector->get_radmax())
-        {
-            double keVtrue = keV;
-            if (!MCtruthE)
-            {
-                double Nph, Ne;
-                if (usePD == 0)
-                    Nph = fabs(scint[3]) / (g1 * (1. + detector->get_P_dphe()));
-                else if (usePD == 1)
-                    Nph = fabs(scint[5]) / g1;
-                else
-                    Nph = fabs(scint[7]) / g1;
-                if (usePD == 0)
-                    Ne = fabs(scint2[5]) / (g2 * (1. + detector->get_P_dphe()));
-                else
-                    Ne = fabs(scint2[7]) / g2;
-                if (signal1 <= 0.)
-                    Nph = 0.;
-                if (signal2 <= 0.) 
-                    Ne = 0.;
-                if (yields.Lindhard > DBL_MIN && Nph > 0. && Ne > 0.) 
-                {
-                    keV = (Nph + Ne) * Wq_eV * 1e-3 / yields.Lindhard;
-                    //keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
-                                                        // both places, but won't account
-                                                        // for density dependence
-                }
-                else
-                    keV = 0.;
-            }
-            if(doBinning == 1)
-            {
-                indexS1 = (int)floor((signal1-minS1)/s1binWidth);
-                if(logS2 == 1)
-                    indexS2 = (int)floor((log10(signal2)-log10(minS2))/s2binWidth);
-                else
-                    indexS2 = (int)floor((signal2-minS2)/s2binWidth);
-                if(usePosition==1)
-                {
-                    indexR = (int)floor( (sqrt(pow(smearPos[0],2)+pow(smearPos[1],2))-minR)/RbinWidth);
-                    indexZ = (int)floor((smearPos[2]-minZ)/ZbinWidth);
-                }
-                s1s2RZbins[indexS1][indexS2][indexR][indexZ]+=1;
-
-            }
-            else            
-            {
-                outStream << keV << "\t\t";
-                if(outputQuanta == true)
-                    outStream << quanta.photons << "\t" << quanta.electrons << "\t" << (int)scint[0] << "\t" << (int)scint[1] << "\t" << (int)scint2[0] << "\t" << signal1 << "\t\t" << signal2 << "\t\t";
-                else
-                    outStream << signal1 << "\t\t" << signal2 << "\t\t";
-                if(spec.doMigdal == 1 && verbosity == true)
-                    outStream << migdalE[0] << "\t\t" << migdalE[1] << "\t\t";
-                if(useTiming==2)
-                    outStream << scint2[9] << "\t\t";
-                if(usePosition==1)
-                    outStream << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
-                if(MCtruthE == false && verbosity == true)
-                    outStream << keVtrue << "\t\t";
-                if(outputLindhard == 1)
-                    outStream << yields.Lindhard << "\n";                
-                else
-                    outStream << "\n";
-            }
 
         }
-        else if( exposure == -1 )
-            j--;
-
     }
-
+    
     if( exposure == -1 && type == "file")
         outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
     else
