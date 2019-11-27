@@ -564,18 +564,15 @@ int main(int argc, char** argv)
 
     unsigned long int numTrials=0;
     unsigned long int numEventsCreated=0;
-    while ( numEventsCreated < numEvents )
-    {
         
-        unsigned long int k = floor((numEvents-numEventsCreated)/omp_get_num_threads());
-        #pragma omp parallel for private(keV,numTrials,migdalE,token,loc) shared(numEventsCreated,s1s2RZbins)
-        for ( unsigned long int j = 0; j < k; j++) 
+        #pragma omp parallel for schedule(guided) private(keV,migdalE,token,loc) shared(numEventsCreated,numTrials,s1s2RZbins)
+        for ( unsigned long int j = 0; j < numEvents; j++) 
         {
+          genEvent:
             double signal1=0, signal2=0, smearRad=0,pos_x=0, pos_y=0, pos_z=0, r=0, phi=0, driftTime=0, field=0, vD=0;
             int index=0,indexR=0,indexZ=0,indexS1=0,indexS2=0;
+            #pragma omp atomic update
             numTrials++;
-            //if(j % int(floor(numEvents/10)) == 0 && progress == 1)
-            //    cerr << floor(100*j/numEvents) << "% complete\n";
             if (eMin == eMax && eMin >= 0. && eMax > 0.) 
                 keV = eMin;
             else 
@@ -912,9 +909,10 @@ int main(int argc, char** argv)
                 }
                 
             }
+            else 
+                goto genEvent;
 
         }
-    }
     
     if( exposure == -1 && type == "file")
         outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
