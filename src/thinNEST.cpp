@@ -568,6 +568,8 @@ int main(int argc, char** argv)
         #pragma omp parallel for schedule(guided) private(keV,migdalE,token,loc) shared(numEventsCreated,numTrials,s1s2RZbins)
         for ( unsigned long int j = 0; j < numEvents; j++) 
         {
+          if (progress == 1 && j % int(numEvents/10) == 0)
+              cerr << floor(100.*numEventsCreated/numEvents) << "% complete" << endl;
           genEvent:
             double signal1=0, signal2=0, smearRad=0,pos_x=0, pos_y=0, pos_z=0, r=0, phi=0, driftTime=0, field=0, vD=0;
             int index=0,indexR=0,indexZ=0,indexS1=0,indexS2=0;
