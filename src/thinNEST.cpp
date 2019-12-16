@@ -25,7 +25,7 @@ int main(int argc, char** argv)
 
     Detector_def* detector = new Detector_def();
     
-    vector<double> signalE, vTable,
+    vector<double> signalE, vTable, 
     NuisParam = {11.,1.1,0.0480,-0.0533,12.6,0.3,2.,0.3,2.,0.5,1., 1.},
     // alpha,beta,gamma,delta,epsilon,zeta,eta,theta,iota for NR model
     // last 3 are the secret extra parameters for additional flexibility
@@ -58,8 +58,8 @@ int main(int argc, char** argv)
     int optimizeROI=0;
     int doBinning=0;
     int usePosition=0;
-    double wimpMass=10;
-    double wimpCS=1e-45;
+    double wimpMass=1;
+    double wimpCS=1e-35;
     
     const struct option longopts[] =
     {
@@ -565,7 +565,7 @@ int main(int argc, char** argv)
 
     unsigned long int numTrials=0;
     unsigned long int numEventsCreated=0;
-        #pragma omp parallel for schedule(guided) private(keV,migdalE,token,loc) shared(numEventsCreated,numTrials,s1s2RZbins)
+        #pragma omp parallel for schedule(guided) private(keV,migdalE,token,loc) shared(numEventsCreated,numTrials,s1s2RZbins) num_threads(1)
         for ( unsigned long int j = 0; j < numEvents; j++) 
         {
           if (progress == 1 && j % int(numEvents/10) == 0)
@@ -757,10 +757,6 @@ int main(int argc, char** argv)
                 {
                     yields = n.GetYields(type_num, keV, rho, field, double(massNum),
                                      double(atomNum), NuisParam);
-                    if(type_num == beta)
-                    {
-                        yields.ElectronYield=floor(.8*yields.ElectronYield);
-                    }
                     if (spec.isLshell==1)
                         quanta.electrons*=0.9165;
                     if (migdal == 1 && type_num == NR && migdalE[0] > 0)
