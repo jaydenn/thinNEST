@@ -238,9 +238,9 @@ int main(int argc, char** argv)
     }
 
     double s1binWidth = (maxS1-minS1)/numBinsS1;
-    maxZ*=detector->get_TopDrift();minZ*=detector->get_TopDrift();
+    maxZ=detector->get_dt_max();minZ=detector->get_dt_min();
     double ZbinWidth = (maxZ-minZ)/numBinsZ;
-    maxR*=detector->get_radmax(); minR*=detector->get_radmax();
+    maxR*=detector->get_radius(); minR*=detector->get_radius();
     double RbinWidth = (maxR-minR)/numBinsR;
     double s2binWidth;
     if(logS2==1)
@@ -839,76 +839,82 @@ int main(int argc, char** argv)
                 signal2=scint2[6+useCorrected];  // no spike option for S2
             else
                 signal2=-999.;
-            if(signal1>0 && signal2 > 0 && smearRad<detector->get_radmax())
+            if(signal1>0 && signal2 > 0 )
             {
-                #pragma omp atomic update
-                numEventsCreated++;
-                double keVtrue = keV;
-                if (!MCtruthE)
+                //inside fiducial vol?
+                if( smearRad<maxR && smearPos[2]<maxZ && smearPos[2] > minZ)
                 {
-                    double Nph, Ne;
-                    if (usePD == 0)
-                        Nph = fabs(scint[3]) / (g1 * (1. + detector->get_P_dphe()));
-                    else if (usePD == 1)
-                        Nph = fabs(scint[5]) / g1;
-                    else
-                        Nph = fabs(scint[7]) / g1;
-                    if (usePD == 0)
-                        Ne = fabs(scint2[5]) / (g2 * (1. + detector->get_P_dphe()));
-                    else
-                        Ne = fabs(scint2[7]) / g2;
-                    if (signal1 <= 0.)
-                        Nph = 0.;
-                    if (signal2 <= 0.) 
-                        Ne = 0.;
-                    if (yields.Lindhard > DBL_MIN && Nph > 0. && Ne > 0.) 
-                    {
-                        keV = (Nph + Ne) * Wq_eV * 1e-3 / yields.Lindhard;
-                        //keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
-                                                            // both places, but won't account
-                                                            // for density dependence
-                    }
-                    else
-                        keV = 0.;
-                }
-                if(doBinning == 1)
-                {
-                    indexS1 = (int)floor((signal1-minS1)/s1binWidth);
-                    if(logS2 == 1)
-                        indexS2 = (int)floor((log10(signal2)-log10(minS2))/s2binWidth);
-                    else
-                        indexS2 = (int)floor((signal2-minS2)/s2binWidth);
-                    if(usePosition==1)
-                    {
-                        indexR = (int)floor( (sqrt(pow(smearPos[0],2)+pow(smearPos[1],2))-minR)/RbinWidth);
-                        indexZ = (int)floor((smearPos[2]-minZ)/ZbinWidth);
-                    }
                     #pragma omp atomic update
-                    s1s2RZbins[indexS1][indexS2][indexR][indexZ]+=1;
+                    numEventsCreated++;
+                    double keVtrue = keV;
+                    if (!MCtruthE)
+                    {
+                        double Nph, Ne;
+                        if (usePD == 0)
+                            Nph = fabs(scint[3]) / (g1 * (1. + detector->get_P_dphe()));
+                        else if (usePD == 1)
+                            Nph = fabs(scint[5]) / g1;
+                        else
+                            Nph = fabs(scint[7]) / g1;
+                        if (usePD == 0)
+                            Ne = fabs(scint2[5]) / (g2 * (1. + detector->get_P_dphe()));
+                        else
+                            Ne = fabs(scint2[7]) / g2;
+                        if (signal1 <= 0.)
+                            Nph = 0.;
+                        if (signal2 <= 0.) 
+                            Ne = 0.;
+                        if (yields.Lindhard > DBL_MIN && Nph > 0. && Ne > 0.) 
+                        {
+                            keV = (Nph + Ne) * Wq_eV * 1e-3 / yields.Lindhard;
+                            //keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
+                                                                // both places, but won't account
+                                                                // for density dependence
+                        }
+                        else
+                            keV = 0.;
+                    }
+                    if(doBinning == 1)
+                    {
+                        indexS1 = (int)floor((signal1-minS1)/s1binWidth);
+                        if(logS2 == 1)
+                            indexS2 = (int)floor((log10(signal2)-log10(minS2))/s2binWidth);
+                        else
+                            indexS2 = (int)floor((signal2-minS2)/s2binWidth);
+                        if(usePosition==1)
+                        {
+                            indexR = (int)floor( (sqrt(pow(smearPos[0],2)+pow(smearPos[1],2))-minR)/RbinWidth);
+                            indexZ = (int)floor((smearPos[2]-minZ)/ZbinWidth);
+                        }
+                        #pragma omp atomic update
+                        s1s2RZbins[indexS1][indexS2][indexR][indexZ]+=1;
 
+                    }
+                    else            
+                    {
+                        stringstream tempString;
+                        tempString << keV << "\t\t";
+                        if(outputQuanta == true)
+                            tempString << quanta.photons << "\t" << quanta.electrons << "\t" << (int)scint[0] << "\t" << (int)scint[1] << "\t" << (int)scint2[0] << "\t" << signal1 << "\t\t" << signal2 << "\t\t";
+                        else
+                            tempString << signal1 << "\t\t" << signal2 << "\t\t";
+                        if(spec.doMigdal == 1 && verbosity == true)
+                            tempString << migdalE[0] << "\t\t" << migdalE[1] << "\t\t";
+                        if(useTiming==2)
+                            tempString << scint2[9] << "\t\t";
+                        if(usePosition==1)
+                            tempString << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
+                        if(MCtruthE == false && verbosity == true)
+                            tempString << keVtrue << "\t\t";
+                        if(outputLindhard == 1)
+                            tempString << yields.Lindhard << "\n";                
+                        else
+                            tempString << "\n";
+                        outStream << tempString.str();
+                    }
                 }
-                else            
-                {
-                    stringstream tempString;
-                    tempString << keV << "\t\t";
-                    if(outputQuanta == true)
-                        tempString << quanta.photons << "\t" << quanta.electrons << "\t" << (int)scint[0] << "\t" << (int)scint[1] << "\t" << (int)scint2[0] << "\t" << signal1 << "\t\t" << signal2 << "\t\t";
-                    else
-                        tempString << signal1 << "\t\t" << signal2 << "\t\t";
-                    if(spec.doMigdal == 1 && verbosity == true)
-                        tempString << migdalE[0] << "\t\t" << migdalE[1] << "\t\t";
-                    if(useTiming==2)
-                        tempString << scint2[9] << "\t\t";
-                    if(usePosition==1)
-                        tempString << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
-                    if(MCtruthE == false && verbosity == true)
-                        tempString << keVtrue << "\t\t";
-                    if(outputLindhard == 1)
-                        tempString << yields.Lindhard << "\n";                
-                    else
-                        tempString << "\n";
-                    outStream << tempString.str();
-                }
+                else
+                    numTrials--;
                 
             }
             else 
