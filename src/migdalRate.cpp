@@ -12,10 +12,11 @@ using namespace std;
 
 gsl_integration_workspace * W;
 double Leff = 0.15;
+double Mn = 931493;
 double MtXe = 131.29*931493;
 double Me = 510.999;
 double nl_energy[6][5] = {{    -1,    -1,    -1,-1},
-                          {    35,    -1,    -1,-1},
+                          {    35,    -1,    -1,-1},    
                           {   5.4,   4.9,    -1,-1},
                           {   1.1,  0.93,  0.66,-1},
                           {   0.2,  0.14,6.1e-2,-1},
@@ -101,7 +102,7 @@ double Z_nl(int N, int l, double Qe, double Ee)
         return pow((Qe / 0.001),2) * gsl_spline_eval(Znl_spline[N][l], Ee, Znl_accel[N][l]);
 }
 
-vector<int> rand_nl(double ERnr)
+vector<int> rand_nl(double ERnr, double maxEM)
 {
     double r = RandomGen::rndm()->rand_uniform();
     double p = 0;
@@ -111,24 +112,29 @@ vector<int> rand_nl(double ERnr)
     {
         for (int L=0; L<Nlmax[N]; L++)
         {
-            p += pow(qe(ERnr)/(Me*0.001),2) * Pnl[N][L];
-            if(r<p)
+            if(nl_energy[N][L] < maxEM)
             {
-                NL[0]=N;
-                NL[1]=L;
-                return NL;
+                p += pow(qe(ERnr)/(Me*0.001),2) * Pnl[N][L];
+                if(r<p)
+                {
+                    NL[0]=N;
+                    NL[1]=L;
+                    return NL;
+                }
             }
         }
     }
     return NL;
 }
 
-vector<double> rand_migdalE(double ERnr)
+vector<double> rand_migdalE_old(double ERnr, int mig_type, double monoE)
 {
     
     vector<double> energies = {0,0};
+    double maxEM = 2*sqrt(monoE*ERnr*MtXe/Mn)-ERnr*(MtXe+Mn)/Mn;
+
     //get a random electron (proportional to prob)
-    vector<int> NL = rand_nl(ERnr);
+    vector<int> NL = rand_nl(ERnr,maxEM);
 
     if (NL[0]>0)
     {
@@ -136,7 +142,7 @@ vector<double> rand_migdalE(double ERnr)
         
         double yMax = pow((qe(ERnr) / 0.001),2)*Znl_y_max[NL[0]][NL[1]];
         double xMin = Znl_x_min[NL[0]][NL[1]];
-        double xMax = Znl_x_max[NL[0]][NL[1]];
+        double xMax = maxEM - energies[1];
         double FuncValue;
 
         vector<double> xyTry = {
@@ -152,6 +158,37 @@ vector<double> rand_migdalE(double ERnr)
     }
 
     return energies;
+
+}
+
+//get a random electron (proportional to prob)
+vector<double> rand_migdalE(double ERnr, int mig_type, double monoE)
+{
+    
+    vector<double> energies = {0,0};
+    double maxEM = 2*sqrt(monoE*ERnr*MtXe/Mn)-ERnr*(MtXe+Mn)/Mn;
+    double Ee,EeMin,EeMax,prob;
+
+    double r = RandomGen::rndm()->rand_uniform();    
+    double f = RandomGen::rndm()->rand_uniform();
+    for(int N=1; N<6; N++)
+    {
+        for (int L=0; L<Nlmax[N]; L++)
+        {
+            if(nl_energy[N][L] < maxEM)
+            {
+                EeMin = Znl_x_min[N][L];
+                EeMax = maxEM - nl_energy[N][L];
+                if (EeMax < EeMin)
+                    continue;
+                Ee = r*(EeMax-EeMin)+EeMin;
+                prob = Z_nl( N, L, qe(ERnr), Ee)/(EeMax-EeMin); //prob density needs to be scaled
+                if(f<prob)
+                    return {Ee,nl_energy[N][L],N};
+            }
+        }
+    }
+    return {0,0,0};
 
 }
 

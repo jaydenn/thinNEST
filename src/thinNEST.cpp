@@ -48,7 +48,7 @@ int main(int argc, char** argv)
     double inField = -1;
     position = "-1";
     double fPos = -1;
-    int migdal=0;
+    int migdal=0; int mig_type = 0;
     int seed=-1; 
     //int doCalibration = false;
     int verbose=0;
@@ -288,6 +288,13 @@ int main(int argc, char** argv)
             assert(0);
         }
         
+        if (spec.spline_spectrum_prep.subType == "monoE")
+            mig_type = 1;
+        else if (spec.spline_spectrum_prep.subType == "neutrino")
+            mig_type = 2;
+        else if (spec.spline_spectrum_prep.subType == "wimp")
+            mig_type = 3;
+
         if ( numEvents == 0 )
         {
             double expectedN = spec.spline_spectrum_prep.totRate * exposure;
@@ -402,7 +409,7 @@ int main(int argc, char** argv)
         spec.doMigdal = 1;
         cout << "initializing migdal calc.." << endl;
         init_Znl();
-        calcMigdalSpectrum(&(spec.spline_spectrum_prep)); //optional
+        //calcMigdalSpectrum(&(spec.spline_spectrum_prep)); //optional
     }
     else
         spec.doMigdal = 0;
@@ -634,7 +641,7 @@ int main(int argc, char** argv)
                 }
             }
             if (migdal == 1 && type_num == NR)
-                migdalE = rand_migdalE(keV);  // Returns tuple of [electron energy, binding energy of shell]
+                migdalE = rand_migdalE(keV,mig_type,spec.spline_spectrum_prep.monoE);  // Returns tuple of [electron energy, binding energy of shell]
 
 
             if (type_num != WIMP && type_num != B8 && eMax > 0.) 
@@ -758,21 +765,22 @@ int main(int argc, char** argv)
                     yields = n.GetYields(type_num, keV, rho, field, double(massNum),
                                      double(atomNum), NuisParam);
                     if (spec.isLshell==1)
-                        quanta.electrons*=0.9165;
+                        yields.ElectronYield*=0.9165;
                     if (migdal == 1 && type_num == NR && migdalE[0] > 0)
                     {
                         yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
                                      double(atomNum), NuisParam);
                         yieldsMigGam = n.GetYields(gammaRay, migdalE[1], rho, field, double(massNum),
                                      double(atomNum), NuisParam);
-                                        
+                        if (int(migdalE[2]) == 2)   
+                            yieldsMigGam.ElectronYield *= 0.9165;            
                         yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigGam.PhotonYield;
                         yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigGam.ElectronYield;
                     }
                     quanta = n.GetQuanta(yields, rho, FreeParam);
                     
                 }
-                else
+                else //review this
                 {
                     yields.PhotonYield = 0.;
                     yields.ElectronYield = 0.;

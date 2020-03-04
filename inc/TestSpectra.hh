@@ -57,11 +57,14 @@ class TestSpectra {
     gsl_spline *specSplineICDF;
     gsl_interp_accel *accelICDF;
     string type;
+    string subType;
     string filename;
     double xMax = 0;
     double xMin = 0;
     double yMax = 0;
     double totRate = 0;
+    bool doMig = 0;
+    double monoE = 0;
   };
   SPLINE_spectrum_prep spline_spectrum_prep;
   
