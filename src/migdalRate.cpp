@@ -127,41 +127,7 @@ vector<int> rand_nl(double ERnr, double maxEM)
     return NL;
 }
 
-vector<double> rand_migdalE_old(double ERnr, int mig_type, double monoE)
-{
-    
-    vector<double> energies = {0,0};
-    double maxEM = 2*sqrt(monoE*ERnr*MtXe/Mn)-ERnr*(MtXe+Mn)/Mn;
-
-    //get a random electron (proportional to prob)
-    vector<int> NL = rand_nl(ERnr,maxEM);
-
-    if (NL[0]>0)
-    {
-        energies[1] = nl_energy[NL[0]][NL[1]];
-        
-        double yMax = pow((qe(ERnr) / 0.001),2)*Znl_y_max[NL[0]][NL[1]];
-        double xMin = Znl_x_min[NL[0]][NL[1]];
-        double xMax = maxEM - energies[1];
-        double FuncValue;
-
-        vector<double> xyTry = {
-          xMin + (xMax - xMin) * RandomGen::rndm()->rand_uniform(),
-          yMax * RandomGen::rndm()->rand_uniform(), 1.};
-        while (xyTry[2] > 0.)
-        {
-            FuncValue = Z_nl( NL[0], NL[1], qe(ERnr),  xyTry[0]);
-            xyTry = RandomGen::rndm()->VonNeumann(xMin, xMax, 0., yMax, xyTry[0],
-                                              xyTry[1], FuncValue);
-        }
-        energies[0] = xyTry[0];
-    }
-
-    return energies;
-
-}
-
-//get a random electron (proportional to prob)
+//eject a random electron? (proportional to prob)
 vector<double> rand_migdalE(double ERnr, int mig_type, double monoE)
 {
     

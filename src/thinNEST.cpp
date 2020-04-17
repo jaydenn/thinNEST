@@ -541,7 +541,7 @@ int main(int argc, char** argv)
     if(spec.doMigdal == 1 && verbosity == true)
     {
         outputPars+=2;
-        header.append("migE[keV]\tmigP[keV]\t");
+        header.append("migE[keV]\tmigP[keV]\tmigN\t\t");
     }
     if(useTiming==2)
     {
@@ -639,7 +639,7 @@ int main(int argc, char** argv)
                 }
             }
             if (migdal == 1 && type_num == NR)
-                migdalE = rand_migdalE(keV,mig_type,spec.spline_spectrum_prep.monoE);  // Returns tuple of [electron energy, binding energy of shell]
+                migdalE = rand_migdalE(keV,mig_type,spec.spline_spectrum_prep.monoE);  // Returns tuple of [electron energy, binding energy of shell, shell index]
 
 
             if (type_num != WIMP && type_num != B8 && eMax > 0.) 
@@ -902,7 +902,7 @@ int main(int argc, char** argv)
                         else
                             tempString << signal1 << "\t\t" << signal2 << "\t\t";
                         if(spec.doMigdal == 1 && verbosity == true)
-                            tempString << migdalE[0] << "\t\t" << migdalE[1] << "\t\t";
+                            tempString << migdalE[0] << "\t\t" << migdalE[1] << "\t\t" << int(migdalE[2]) << "\t\t";
                         if(useTiming==2)
                             tempString << scint2[9] << "\t\t";
                         if(usePosition==1)
