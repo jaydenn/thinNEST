@@ -15,6 +15,8 @@ double Leff = 0.15;
 double Mn = 931493;
 double MtXe = 131.29*931493;
 double Me = 510.999;
+double isoFracTable[7] = {0.0191421,0.283724,0.324514,0.536981,0.806574,0.911205,1};
+double isoTable[7] = {128,129,130,131,132,134,136};
 double nl_energy[6][5] = {{    -1,    -1,    -1,-1},
                           {    35,    -1,    -1,-1},    
                           {   5.4,   4.9,    -1,-1},
@@ -22,22 +24,22 @@ double nl_energy[6][5] = {{    -1,    -1,    -1,-1},
                           {   0.2,  0.14,6.1e-2,-1},
                           {2.1e-2,9.8e-3,    -1,-1},
 }; //energy levels for xenon
-double Pnl[6][3] = {  {     0,     0,     0},
-                      {4.6e-6,     0,     0},
-                      {2.9e-5,1.3e-4,     0},
-                      {8.7e-5,5.2e-4,3.5e-3},
-                      {3.4e-4,1.4e-3,3.4e-2},
-                      {4.1e-4,   0.1,     0},
-}; //total ionization prob at qe=0.001*Me
 
 int Nlmax[6] = {-1,1,2,3,3,2};
 
 gsl_spline *Znl_spline[6][3];
 gsl_interp_accel *Znl_accel[6][3];
+gsl_spline *Znl_int_spline[6][3];
+gsl_interp_accel *Znl_int_accel[6][3];
 double Znl_y_max[6][3];
 double Znl_x_max[6][3];
 double Znl_x_min[6][3];
 
+double mu(double x, double y)
+{
+    return x*y/(x+y);
+}
+   
 void init_Znl()
 {
     
@@ -78,8 +80,25 @@ void init_Znl()
         gsl_spline_init(Znl_spline[n][l], EMnl[n][l], Znl[n][l], 251);
         Znl_x_min[n][l] = EMnl[n][l][0];
         Znl_x_max[n][l] = EMnl[n][l][250];
-
+        
     }
+    
+    //create integrated probabilities to a maximum Ee
+    double Znl_int[251];
+    for(n=1; n<6; n++)
+    {
+        for(l=0; l<Nlmax[n]; l++)
+        {
+            for(int j=0; j<250; j++)
+            {
+                Znl_int[j] = gsl_spline_eval_integ(Znl_spline[n][l], Znl_x_min[n][l], EMnl[n][l][j], Znl_accel[n][l]);
+            }
+            Znl_int_spline[n][l] = gsl_spline_alloc(gsl_interp_linear, 251);
+            Znl_int_accel[n][l] = gsl_interp_accel_alloc();
+            gsl_spline_init(Znl_int_spline[n][l], EMnl[n][l], Znl_int, 251);
+        }
+    }
+    
     if(RFF.bad())
         perror("error while reading file ");
     RFF.close();
@@ -102,60 +121,78 @@ double Z_nl(int N, int l, double Qe, double Ee)
         return pow((Qe / 0.001),2) * gsl_spline_eval(Znl_spline[N][l], Ee, Znl_accel[N][l]);
 }
 
-vector<int> rand_nl(double ERnr, double maxEM)
+//returns total prob below max_Ee
+double Z_nl_integrated(int N, int l, double Qe, double max_Ee)
+{ 
+    if ( max_Ee > 69.9 )
+    {
+        return pow((Qe / 0.001),2) * gsl_spline_eval(Znl_int_spline[N][l], 69.9, Znl_int_accel[N][l]);
+    }
+    else if ( max_Ee < .001 )
+        return 0;
+    else
+        return pow((Qe / 0.001),2) * gsl_spline_eval(Znl_int_spline[N][l], max_Ee, Znl_int_accel[N][l]);
+}
+
+//returns maximum diff probability of ionization for a given level
+double Znl_max(int N, int l, double Qe)
+{
+    return pow((Qe / 0.001),2) * Znl_y_max[N][l];
+}
+
+//returns a randomly selected xenon isotope
+double rand_xe_isotope() 
 {
     double r = RandomGen::rndm()->rand_uniform();
-    double p = 0;
-    vector <int> NL = {-1,-1};
-
-    for(int N=1; N<6; N++)
-    {
-        for (int L=0; L<Nlmax[N]; L++)
-        {
-            if(nl_energy[N][L] < maxEM)
-            {
-                p += pow(qe(ERnr)/(Me*0.001),2) * Pnl[N][L];
-                if(r<p)
-                {
-                    NL[0]=N;
-                    NL[1]=L;
-                    return NL;
-                }
-            }
-        }
+    for (int i=0;i<8;i++)
+    {   
+        if (r < isoFracTable[i])
+            return isoTable[i];
     }
-    return NL;
+    return 131.3; //in case something goes wrong
 }
 
 //eject a random electron? (proportional to prob)
 vector<double> rand_migdalE(double ERnr, int mig_type, double monoE)
 {
     
-    vector<double> energies = {0,0};
-    double maxEM = 2*sqrt(monoE*ERnr*MtXe/Mn)-ERnr*(MtXe+Mn)/Mn;
-    double Ee,EeMin,EeMax,prob;
+    MtXe = Mn*rand_xe_isotope();
+    double maxEM=0;
+    if (mig_type == 1)
+        maxEM = 2*sqrt(monoE*ERnr*MtXe/Mn)-ERnr*(MtXe+Mn)/Mn;
+    if (mig_type == 2)
+        maxEM = 100;
 
-    double r = RandomGen::rndm()->rand_uniform();    
-    double f = RandomGen::rndm()->rand_uniform();
+    double Ee,EeMax;
+
+    double t,prob=0;
+    t = RandomGen::rndm()->rand_uniform();
     for(int N=1; N<6; N++)
     {
         for (int L=0; L<Nlmax[N]; L++)
         {
-            if(nl_energy[N][L] < maxEM)
+            EeMax = maxEM - nl_energy[N][L];
+            if (EeMax < 0)
+                continue;
+            prob+=Z_nl_integrated(N,L,qe(ERnr),EeMax);
+            if(t<prob)
             {
-                EeMin = Znl_x_min[N][L];
-                EeMax = maxEM - nl_energy[N][L];
-                if (EeMax < EeMin)
-                    continue;
-                Ee = r*(EeMax-EeMin)+EeMin;
-                prob = Z_nl( N, L, qe(ERnr), Ee)/(EeMax-EeMin); //prob density needs to be scaled
-                if(f<prob)
-                    return {Ee,nl_energy[N][L],N};
+                Ee = EeMax*RandomGen::rndm()->rand_uniform();
+                while(RandomGen::rndm()->rand_uniform()*Znl_max(N, L, qe(ERnr)) > Z_nl(N, L, qe(ERnr), Ee))
+                { 
+                    Ee = EeMax*RandomGen::rndm()->rand_uniform();
+                }
+                return {Ee,nl_energy[N][L],(double)N};
             }
         }
     }
     return {0,0,0};
 
+}
+
+double ERmaxNeutronEM(double En, double EM)
+{
+    return pow(mu(MtXe,Mn),2)/(MtXe*Mn)*En*(pow(1-sqrt(1-EM/(mu(MtXe,Mn)*En/Mn)),2)+4*sqrt(1-EM/(mu(MtXe,Mn)*En/Mn)));
 }
 
 double migdalIntegrand(double ErNR, void *pars)
@@ -166,14 +203,10 @@ double migdalIntegrand(double ErNR, void *pars)
     double dRnr;
     int N = migSpec->N;
     
-    if (ErNR > migSpec->NR_spec->xMax )
+    if( ErNR > ERmaxNeutronEM(migSpec->monoE, Edet - ErNR*Leff))
         return 0;
-    else if(ErNR < migSpec->NR_spec->xMin)
-        dRnr = gsl_spline_eval(migSpec->NR_spec->spectrumSpline, migSpec->NR_spec->xMin, migSpec->NR_spec->accelSS);
-    else
-    {
-        dRnr = gsl_spline_eval(migSpec->NR_spec->spectrumSpline, ErNR, migSpec->NR_spec->accelSS);
-    }
+    
+    dRnr = gsl_spline_eval(migSpec->NR_spec->spectrumSpline, ErNR, migSpec->NR_spec->accelSS);
     
     for( int l=0; l<Nlmax[N]; l++ )
     {
@@ -183,8 +216,12 @@ double migdalIntegrand(double ErNR, void *pars)
     return integrand * dRnr;
 }
 
+double ERmaxNeutron(double Edet, double En)
+{
+    return 4*En*Mn*MtXe/pow(Mn+MtXe,2);
+}
 
-double dRdEmigdal(double Edet, TestSpectra::SPLINE_migdal_prep *migSpec)
+double dRdEmigdalNeutron(double Edet, TestSpectra::SPLINE_migdal_prep *migSpec)
 {
     
     gsl_function F;
@@ -197,11 +234,13 @@ double dRdEmigdal(double Edet, TestSpectra::SPLINE_migdal_prep *migSpec)
 
     W = gsl_integration_workspace_alloc (1000);
 
-    double ErMin = migSpec->NR_spec->xMin;
-    double ErMax = migSpec->NR_spec->xMax;
+    double ErMin = migSpec->NR_spec->xMin; //This is effectively zero for all regions we care about
+    double ErMax = ERmaxNeutron( Edet, migSpec->monoE);//migSpec->NR_spec->xMax;
     if(ErMax > Edet/Leff)
         ErMax = Edet/Leff;
-
+    if(ErMax > migSpec->NR_spec->xMax)
+        ErMax = migSpec->NR_spec->xMax;
+    
     gsl_integration_qag(&F, ErMin, ErMax, tol, 1e-3, limit, 6, W, &integral, &absErr);
     
     if(absErr/integral > .01)
@@ -220,12 +259,11 @@ void calcMigdalSpectrum(TestSpectra::SPLINE_spectrum_prep *NRspec)
     migdalSpec.NR_spec = NRspec;
     migdalSpec.migdalSpline = gsl_spline_alloc(gsl_interp_linear,2000);
     migdalSpec.accelMS = gsl_interp_accel_alloc();
-
+    migdalSpec.monoE = NRspec->monoE;
     double Er[2000];
     double Rate[2000];
     
     std::fstream RFF;
-    
     for (int N=2; N<6; N++)
     {
         migdalSpec.N = N;
@@ -242,7 +280,7 @@ void calcMigdalSpectrum(TestSpectra::SPLINE_spectrum_prep *NRspec)
         for (int i=0; i<2000; i++)
         {
             Er[i] = interval*Er[(i-1>=0 ? i-1 : 0)];
-            Rate[i] = dRdEmigdal( Er[i], &migdalSpec);
+            Rate[i] = dRdEmigdalNeutron( Er[i], &migdalSpec);
             RFF << Er[i] << " " << Rate[i] << endl;
         }
         RFF.close();

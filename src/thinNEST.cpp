@@ -59,6 +59,7 @@ int main(int argc, char** argv)
     int usePosition=0;
     double wimpMass=1;
     double wimpCS=1e-35;
+    int ratioEvents = 0;
     
     const struct option longopts[] =
     {
@@ -84,6 +85,7 @@ int main(int argc, char** argv)
         {"field",        required_argument,  0, 'f'},
         {"seed",         required_argument,  0, 'S'},
         {"output",       required_argument,  0, 'o'},
+        {"ratioEvents",  required_argument,  0, 'R'},
         
         {0,0,0,0},
     };
@@ -92,7 +94,7 @@ int main(int argc, char** argv)
     int longindex;
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmbtvpqlrOn:N:s:f:d:P:e:E:f:S:a:o:", longopts, &longindex);
+        iarg = getopt_long(argc, argv, "hmbtvpqlrROn:N:s:f:d:P:e:E:f:S:a:o:", longopts, &longindex);
 
         switch (iarg)
         {
@@ -126,11 +128,14 @@ int main(int argc, char** argv)
             case 'n':
                 numEvents = atoi(optarg);
                 break;
+            case 'N':
+                exposure = atof(optarg);
+                break;
             case 'r':
                 progress = 1;
                 break;
-            case 'N':
-                exposure = atof(optarg);
+            case 'R':
+                ratioEvents = 1;
                 break;
             case 's':
             {
@@ -214,7 +219,7 @@ int main(int argc, char** argv)
     // analysis parameter modifications
     setAnalysisPars(analysisFilename);
     outStream << "using the " << (analysisFilename!="-1" ? analysisFilename : "default" ) << " analysis file" << std::endl;
-    if (verbose==1) verbosity=true; //overright analysis with command line arg
+    if (verbose==1) verbosity=true; //overwrite analysis with command line arg
     
     //set up array for binned data storage
 
@@ -281,6 +286,10 @@ int main(int argc, char** argv)
             spec.isLshell=1;
             type_num = beta;
         }
+        else if (spec.spline_spectrum_prep.type == "neutronB")
+        {
+            type_num = NR;
+        }
         else
         {
             cerr << "type " << spec.spline_spectrum_prep.type << " not recognized\n";
@@ -309,6 +318,10 @@ int main(int argc, char** argv)
             cout << "simulating " << numEvents << " events\n";
 
     }    
+    else if (type == "neutronM")
+    {
+       type_num = NR;
+    }
     else if (type == "NR" || type == "neutron" || type == "-1")
        type_num = NR;  //-1: default particle type is also NR
     else if (type == "WIMP")
@@ -393,7 +406,7 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    if (eMin == -1.) 
+    if (eMin == -1.)
         eMin = 0.;
     if (eMax == -1. && eMin == 0.)
         eMax = 1e2;  // the default energy max is 100 keV
@@ -408,7 +421,7 @@ int main(int argc, char** argv)
         spec.doMigdal = 1;
         cout << "initializing migdal calc.." << endl;
         init_Znl();
-        //calcMigdalSpectrum(&(spec.spline_spectrum_prep)); //optional
+        calcMigdalSpectrum(&(spec.spline_spectrum_prep)); //optional
     }
     else
         spec.doMigdal = 0;
@@ -459,7 +472,7 @@ int main(int argc, char** argv)
     vector<double> g2_params = n.CalculateG2(verbosity);
     g2 = fabs(g2_params[3]);
     double g1 = detector->get_g1();
-
+cout << rho << endl;
     double centralZ =
       (detector->get_gate() - 130. + detector->get_cathode() + 20) /
       2.;  // fid vol def usually shave more off the top, because of gas
@@ -500,7 +513,10 @@ int main(int argc, char** argv)
     if ((g1 * yieldsMax.PhotonYield) > (2. * maxS1) && eMin != eMax)
     {
         if(optimizeROI==1)
+        {
+            cout << "Optimizing ROI\n";
             maxS1 = g1 * yieldsMax.PhotonYield;
+        }
         else
             cerr << "\nWARNING: Your energy maximum may be too high given your maxS1.\n";
     }
@@ -516,7 +532,9 @@ int main(int argc, char** argv)
     }
     else
         vD_middle = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, inField);
-                          
+     
+    if(verbose==1)
+        cout << "drift velocity in middle: " << vTable[vD_middle] << " mm/us";
     cout << endl;
     double keV = -999.;
     vector<double> migdalE = {0,0};
@@ -541,7 +559,7 @@ int main(int argc, char** argv)
     if(spec.doMigdal == 1 && verbosity == true)
     {
         outputPars+=2;
-        header.append("migE[keV]\tmigP[keV]\tmigN\t\t");
+        header.append("migE[keV]\tmigA[keV]\tmigN\t\t");
     }
     if(useTiming==2)
     {
@@ -551,7 +569,7 @@ int main(int argc, char** argv)
     if(usePosition==1)
     {
         outputPars+=2;
-        header.append("r[mm]\tz[mm]\t\t");
+        header.append("r[mm]\tz[us]\t\t");
     }
     if(MCtruthE == false && verbosity == true)
     {
@@ -570,18 +588,8 @@ int main(int argc, char** argv)
         outStream << header << "\n";
 
     unsigned long int numTrials=0;
-    unsigned long int numEventsCreated=0;
         for ( unsigned long int j = 0; j < numEvents; j++) 
         {
-          //need to rethink this
-          //if (progress == 1 && j % int(numEvents/10) == 0)
-          //    cerr << floor(100.*numEventsCreated/numEvents) << "% complete" << endl;
-          //if (numEventsCreated > 100*numEvents)
-          //{
-          //    cerr << "Event creation is very inefficient, stopping" << endl; //need a way to turn this off
-          //    assert(0);
-          //}
-          genEvent:
             double signal1=0, signal2=0, smearRad=0,pos_x=0, pos_y=0, pos_z=0, r=0, phi=0, driftTime=0, field=0, vD=0;
             int index=0,indexR=0,indexZ=0,indexS1=0,indexS2=0;
             numTrials++; //keep track for when calculating effective exposure based off fixed event number simulation
@@ -640,8 +648,13 @@ int main(int argc, char** argv)
             }
             if (migdal == 1 && type_num == NR)
                 migdalE = rand_migdalE(keV,mig_type,spec.spline_spectrum_prep.monoE);  // Returns tuple of [electron energy, binding energy of shell, shell index]
-
-
+        
+        //EDITED for testing
+        //cout << "testing Migdal energy, do not use for real results\n";
+        //migdalE[0]+=migdalE[1];
+        //migdalE[1]=0;
+        //
+        
             if (type_num != WIMP && type_num != B8 && eMax > 0.) 
             {
                 if (keV > eMax) 
@@ -660,7 +673,7 @@ int main(int argc, char** argv)
                 phi = 2. * M_PI * RandomGen::rndm()->rand_uniform();
                 pos_x = r * cos(phi);
                 pos_y = r * sin(phi);
-            } 
+            }
             else
             {
                 delimiter = ",";
@@ -689,6 +702,11 @@ int main(int argc, char** argv)
                     pos_y = r * sin(phi);
                 }
                 // if ( j == 0 ) { origX = pos_x; origY = pos_y; }
+            }
+            if (spec.spline_spectrum_prep.MFP!=-1) //if this is a beam with small MFP then place collision along x axis, MFP is calculated at density of 3g/cm3
+            {
+                pos_x = spec.spline_spectrum_prep.MFP*rho/3*log(1/(1-RandomGen::rndm()->rand_uniform()))-detector->get_radmax();
+                pos_y = 0;
             }
 
             if (inField == -1.) 
@@ -758,17 +776,18 @@ int main(int argc, char** argv)
             YieldResult yieldsMigE;
             YieldResult yieldsMigGam;
             QuantaResult quanta;
-                if (keV > .001 * Wq_eV) 
+                if (keV > .001 * Wq_eV || migdalE[0] > 0) 
                 {
+                    
                     yields = n.GetYields(type_num, keV, rho, field, double(massNum),
                                      double(atomNum), NuisParam);
                     if (spec.isLshell==1)
                         yields.ElectronYield*=0.9165;
                     if (migdal == 1 && type_num == NR && migdalE[0] > 0)
-                    {
+                    { 
                         yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
                                      double(atomNum), NuisParam);
-                        yieldsMigGam = n.GetYields(gammaRay, migdalE[1], rho, field, double(massNum),
+                        yieldsMigGam = n.GetYields(beta, migdalE[1], rho, field, double(massNum),
                                      double(atomNum), NuisParam);
                         if (int(migdalE[2]) == 2)   
                             yieldsMigGam.ElectronYield *= 0.9165;            
@@ -778,7 +797,7 @@ int main(int argc, char** argv)
                     quanta = n.GetQuanta(yields, rho, FreeParam);
                     
                 }
-                else //review this
+                else 
                 {
                     yields.PhotonYield = 0.;
                     yields.ElectronYield = 0.;
@@ -786,17 +805,6 @@ int main(int argc, char** argv)
                     yields.Lindhard = 0.;
                     yields.ElectricField = 0.;
                     yields.DeltaT_Scint = 0.;
-                    if (spec.doMigdal && type_num == NR && migdalE[0] > 0)
-                    {
-                        yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
-                                     double(atomNum), NuisParam);
-                        yieldsMigGam = n.GetYields(gammaRay, migdalE[1], rho, field, double(massNum),
-                                     double(atomNum), NuisParam);
-                                        
-                        yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigGam.PhotonYield;
-                        yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigGam.ElectronYield;
-                    }
-                    quanta = n.GetQuanta(yields, rho, FreeParam);
                     quanta.photons = 0;
                     quanta.electrons = 0;
                     quanta.ions = 0;
@@ -845,7 +853,7 @@ int main(int argc, char** argv)
                 signal2=scint2[6+useCorrected];  // no spike option for S2
             else
                 signal2=-999.;
-            if(signal1>0 && signal2 > 0 )
+            if(signal1 > 0 && signal2 > 0 ) //&&  migdalE[0] > 0
             {
                 //inside fiducial vol?
                 if( smearRad<maxR && smearPos[2]<maxZ && smearPos[2] > minZ)
@@ -902,7 +910,7 @@ int main(int argc, char** argv)
                         else
                             tempString << signal1 << "\t\t" << signal2 << "\t\t";
                         if(spec.doMigdal == 1 && verbosity == true)
-                            tempString << migdalE[0] << "\t\t" << migdalE[1] << "\t\t" << int(migdalE[2]) << "\t\t";
+                            tempString << migdalE[0] << "\t\t\t" << migdalE[1] << "\t\t\t" << int(migdalE[2]) << "\t\t";
                         if(useTiming==2)
                             tempString << scint2[9] << "\t\t";
                         if(usePosition==1)
@@ -922,13 +930,15 @@ int main(int argc, char** argv)
                     numTrials--;
                 }
             }
-            else 
-                goto genEvent;
+            else
+                j--;
 
         }
     
-    if( exposure == -1 && type == "file")
+    if( exposure == -1 && type == "file" && ratioEvents == 0)
         outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
+    else if( exposure == -1 && type == "file" && ratioEvents == 1)
+        outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
     else
         outStream << "exposure: " << exposure << endl;
 
@@ -985,8 +995,6 @@ void setDetectorPars(string detectorName, Detector_def *detector)
             if(lineElements[1] == "=")
             {
                 lineElements[2].pop_back();
-                if(lineElements[0] == "g1")
-                    detector->set_g1(stof(lineElements[2]));
                 if(lineElements[0] == "g1")
                     detector->set_g1(stof(lineElements[2]));
                 if(lineElements[0] == "sPEres")
@@ -1047,6 +1055,8 @@ void setDetectorPars(string detectorName, Detector_def *detector)
                     detector->set_PosResExp(stof(lineElements[2]));
                 if(lineElements[0] == "PosResBase")
                     detector->set_PosResBase(stof(lineElements[2]));
+                if(lineElements[0] == "driftField")
+                    detector->set_driftField(stof(lineElements[2]));
             }        
         }
         detector->set_noise(noise[0],noise[1],noise[2],noise[3]);
@@ -1087,7 +1097,7 @@ void setAnalysisPars(string analysisFilename)
         {   
             if(lineElements[2] == "=")
             {
-                std::istringstream is(lineElements[2]);
+                std::istringstream is(lineElements[3]);
                 bool b;
                 is >> std::boolalpha >> b;
                 if(lineElements[1] == "verbosity")

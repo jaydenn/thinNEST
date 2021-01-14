@@ -65,6 +65,7 @@ class TestSpectra {
     double totRate = 0;
     bool doMig = 0;
     double monoE = 0;
+    double MFP = -1;
   };
   SPLINE_spectrum_prep spline_spectrum_prep;
   
@@ -76,6 +77,7 @@ class TestSpectra {
     double yMax = 0;
     double totRate = 0;
     double ER=0;
+    double monoE;
     int N=-1;
     SPLINE_spectrum_prep *NR_spec;
   };

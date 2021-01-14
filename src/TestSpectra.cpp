@@ -584,10 +584,17 @@ TestSpectra::SPLINE_spectrum_prep TestSpectra::SPLINE_read_spectrum_file(const s
     }
     RFF >> spectrum.type;
     if (spectrum.type == "NRm" )
-    {    
+    {
         RFF >> spectrum.subType >> spectrum.monoE;
         spectrum.type = "NR";
         if (spectrum.subType == "neutrino")
+            ;//maybe need to do something else
+    }
+    if (spectrum.type == "neutronBeam" )
+    {
+        spectrum.type = "NR";
+        RFF >> spectrum.subType >> spectrum.monoE;
+        RFF >> spectrum.subType >> spectrum.MFP; //mean free path in mm
             ;//maybe need to do something else
     }
     double* Er = new double[10000]();

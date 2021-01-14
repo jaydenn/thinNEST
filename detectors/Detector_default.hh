@@ -71,6 +71,9 @@ class Detector_def : public VDetector {
     // 2-D (X & Y) Position Reconstruction
     PosResExp = 0.015;     // exp increase in pos recon res at hi r, 1/mm
     PosResBase = 30.;  // baseline unc in mm, see NEST.cpp for usage
+    
+    //drift field
+    driftField = 100.;
   }
 
   // S1 PDE custom fit for function of z
@@ -78,12 +81,12 @@ class Detector_def : public VDetector {
   virtual double FitS1(double xPos_mm, double yPos_mm, double zPos_mm) {
     return 1.;  // unitless, 1.000 at detector center
   }
-
+  
   // Drift electric field as function of Z in mm
   // For example, use a high-order poly spline
   virtual double FitEF(double xPos_mm, double yPos_mm,
                        double zPos_mm) {  // in V/cm
-    return 310.;
+    return driftField;
   }
 
   // S2 PDE custom fit for function of r
