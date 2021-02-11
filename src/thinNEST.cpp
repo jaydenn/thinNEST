@@ -28,7 +28,8 @@ int main(int argc, char** argv)
     NuisParam = {11.,1.1,0.0480,-0.0533,12.6,0.3,2.,0.3,2.,0.5,1., 1.},
     // alpha,beta,gamma,delta,epsilon,zeta,eta,theta,iota for NR model
     // last 3 are the secret extra parameters for additional flexibility
-    FreeParam = {1.,1.,0.1,0.5,0.07};
+ //   FreeParam = {-0.1,0.5,0.06,-0.6,1.11,0.95,0.08,0.08};
+    FreeParam = {1,1,0.07,0.5,0.19,2.25};
     // Fi, Fex, and 3 non-binomial recombination fluctuation parameters
     string position, delimiter, token;
     size_t loc;
@@ -829,12 +830,12 @@ cout << rho << endl;
             vector<long int> wf_time;
             vector<double> wf_amp;
             vector<double> scint =
-                n.GetS1(quanta, truthPos, smearPos, vD, vD_middle, type_num, j, field,
+                n.GetS1(quanta, truthPos[0], truthPos[1], truthPos[2], smearPos[0],smearPos[1],smearPos[2], vD, vD_middle, type_num, j, field,
                         keV, useTiming, verbosity, wf_time, wf_amp);
             if (truthPos[2] < detector->get_cathode()) 
                 quanta.electrons = 0;
             vector<double> scint2 = 
-                n.GetS2(quanta.electrons, truthPos, smearPos, driftTime, vD, j, field,
+                n.GetS2(quanta.electrons, truthPos[0], truthPos[1], truthPos[2], smearPos[0],smearPos[1],smearPos[2], driftTime, vD, j, field,
                         useTiming, verbosity, wf_time, wf_amp, g2_params);
 
 
@@ -923,6 +924,8 @@ cout << rho << endl;
                             tempString << "\n";
                         outStream << tempString.str();
                     }
+                    if (progress == 1 && (int)((double) j/numEvents * 100) % 10 ==0)
+                        cout << (double) j/numEvents * 100 << "%\n";
                 }
                 else
                 {
@@ -1059,7 +1062,7 @@ void setDetectorPars(string detectorName, Detector_def *detector)
                     detector->set_driftField(stof(lineElements[2]));
             }        
         }
-        detector->set_noise(noise[0],noise[1],noise[2],noise[3]);
+        detector->set_noiseB(noise[0],noise[1],noise[2],noise[3]);
         lineElements.clear();
     }
     RFF.close();

@@ -27,17 +27,23 @@ class Detector_def : public VDetector {
     sPEres = 0.28;   // single phe resolution (Gaussian assumed)
     sPEthr = 0.35;   // POD threshold in phe, usually used IN PLACE of sPEeff
     sPEeff = 0.95;   // actual efficiency, can be used in lieu of POD threshold
-    noise[0] = 0.0;  // baseline noise mean and width in PE (Gaussian)
-    noise[1] = 0.0;  // baseline noise mean and width in PE (Gaussian)
+    noiseB[0] = 0.0;  // baseline noise mean and width in PE (Gaussian)
+    noiseB[1] = 0.0;  // baseline noise mean and width in PE (Gaussian)
+    noiseB[2] = 0.0;  // baseline noise mean in e- (for grid wires)
+    noiseB[3] = 0.0;  // baseline noise width in e- (for grid wires)
     P_dphe = 0.225;  // chance 1 photon makes 2 phe instead of 1 in Hamamatsu PMT
 
     coinWind = 100;  // S1 coincidence window in ns
     coinLevel = 2;   // how many PMTs have to fire for an S1 to count
     numPMTs = 1200;   // For coincidence calculation
 
+    extraPhot=false;  // for matching EXO-200's W measurement
+    noiseL[0] = 3e-2;  // S1->S1 Gaussian-smeared with noiseL[0]*S1
+    noiseL[1] = 3e-2;  // S2->S2 Gaussian-smeared with noiseL[1]*S2
+    
     // Ionization and Secondary Scintillation (S2) parameters
     g1_gas = 0.0823;  // phd per S2 photon in gas, used to get SE size
-    s2Fano = 3.65;  // Fano-like fudge factor for SE width
+    s2Fano = 3.61;  // Fano-like fudge factor for SE width
     s2_thr = 100.;  // the S2 threshold in phe or PE, *not* phd. Affects NR most
     E_gas = 10.85;    // field in kV/cm between liquid/gas border and anode -Set to match ext. eff
     eLife_us = 1600.;  // the drift electron mean lifetime in micro-seconds
@@ -99,10 +105,22 @@ class Detector_def : public VDetector {
                                 double zPos_mm) {
     vector<double> BotTotRat(2);
 
-    BotTotRat[0] = 0.6;  // S1 bottom-to-total ratio
-    BotTotRat[1] = 0.4;  // S2 bottom-to-total ratio, typically only used for
+    //BotTotRat[0] = 0.6;  // S1 bottom-to-total ratio
+    //BotTotRat[1] = 0.4;  // S2 bottom-to-total ratio, typically only used for
                          // position recon (1-this)
-
+    double radSq = ( pow(xPos_mm,2.) + pow(yPos_mm,2.) ) / 1e2;
+    double TBAzS1 = -0.853 + 0.00925 * ( zPos_mm / 10. );
+    double TBArS2 = 0.126+0.000545*radSq-1.90e-6*radSq*radSq+1.20e-9*radSq*radSq*radSq;
+    
+    if ( TBAzS1 < -1. ) TBAzS1 = -1.;
+    if ( TBAzS1 > 1.0 ) TBAzS1 = 1.0;
+    if ( TBArS2 < -1. ) TBArS2 = -1.;
+    if ( TBArS2 > 1.0 ) TBArS2 = 1.0;
+    
+    BotTotRat[0] = (1.-TBAzS1)/2.;  // 1712.05696
+    BotTotRat[1] = 0.449;//(1.-TBArS2)/2.;  // 1712.05696 and 1710.02752
+                           // position recon (1-this)
+    
     return BotTotRat;
   }
 

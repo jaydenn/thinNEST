@@ -7,7 +7,7 @@ bool outputQuanta = false;
 
 // General parameters of importance changing global behavior
 bool MCtruthE = false;    // false means reconstructed energy
-bool MCtruthPos = true;  // false means reconstructed position
+bool MCtruthPos = false;  // false means reconstructed position
 
 int useTiming = 0;  // calculates S2 width, should rename this
 

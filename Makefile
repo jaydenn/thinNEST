@@ -1,7 +1,7 @@
 CC = g++
-FLAGS = -g -O2 -std=c++11 -Wall -fopenmp
-LIBS = -L../nest/build -lgsl -lgslcblas -lstdc++ -lm -lNEST_core
-INCLUDE = -I./inc -I../nest/include/NEST -I../nest/include/Detectors -I./detectors
+FLAGS = -g -O2 -std=c++11 -Wall
+LIBS = -L../nest_v2/build -lgsl -lgslcblas -lstdc++ -lm -lNESTcore
+INCLUDE = -I./inc -I../nest_v2/include/NEST -I../nest_v2/include/Detectors -I./detectors
 OBJECTS = src/TestSpectra.o src/migdalRate.o
 
 default: thinNEST
