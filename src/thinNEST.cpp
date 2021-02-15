@@ -924,7 +924,7 @@ cout << rho << endl;
                             tempString << "\n";
                         outStream << tempString.str();
                     }
-                    if (progress == 1 && (int)((double) j/numEvents * 100) % 10 ==0)
+                    if (progress == 1 && fmod(((double) j/numEvents * 100),10) ==0)
                         cout << (double) j/numEvents * 100 << "%\n";
                 }
                 else
