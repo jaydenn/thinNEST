@@ -243,8 +243,6 @@ int main(int argc, char** argv)
     }
 
     double s1binWidth = (maxS1-minS1)/numBinsS1;
-    maxZ=detector->get_dt_max();minZ=detector->get_dt_min();
-    double ZbinWidth = (maxZ-minZ)/numBinsZ;
     maxR*=detector->get_radius(); minR*=detector->get_radius();
     double RbinWidth = (maxR-minR)/numBinsR;
     double s2binWidth;
@@ -533,7 +531,11 @@ cout << rho << endl;
     }
     else
         vD_middle = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, inField);
-     
+    
+    //setup fiducial volume depths now that we have velocity - ASSUMING CONSTANT FIELD
+    maxZ=detector->get_dt_max()*vTable[vD_middle];minZ=detector->get_dt_min()*vTable[vD_middle];
+    double ZbinWidth = (maxZ-minZ)/numBinsZ; 
+
     if(verbose==1)
         cout << "drift velocity in middle: " << vTable[vD_middle] << " mm/us";
     cout << endl;
