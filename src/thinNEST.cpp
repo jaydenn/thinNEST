@@ -1130,6 +1130,14 @@ void setAnalysisPars(string analysisFilename)
                     numBinsZ = stoi(lineElements[3]);
                 if(lineElements[1] == "numBinsR")
                     numBinsR = stoi(lineElements[3]);
+                if(lineElements[1] == "minZ")
+                    minZ = stoi(lineElements[3]);
+                if(lineElements[1] == "maxZ")
+                    maxZ = stoi(lineElements[3]);
+                if(lineElements[1] == "minR")
+                    minR = stoi(lineElements[3]);
+                if(lineElements[1] == "maxR")
+                    maxR = stoi(lineElements[3]);
                 if(lineElements[1] == "minS2")
                     minS2 = stof(lineElements[3]);
                 if(lineElements[1] == "maxS2")
