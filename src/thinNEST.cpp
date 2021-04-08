@@ -221,7 +221,7 @@ int main(int argc, char** argv)
     setAnalysisPars(analysisFilename);
     outStream << "using the " << (analysisFilename!="-1" ? analysisFilename : "default" ) << " analysis file" << std::endl;
     if (verbose==1) verbosity=true; //overwrite analysis with command line arg
-    
+cout << numBinsZ << " " << numBinsR << endl;    
     //set up array for binned data storage
 
     int**** s1s2RZbins;
@@ -1100,6 +1100,7 @@ void setAnalysisPars(string analysisFilename)
             lineElements.push_back(s);
         if(lineElements.size()>3)
         {   
+            
             if(lineElements[2] == "=")
             {
                 std::istringstream is(lineElements[3]);
@@ -1125,6 +1126,10 @@ void setAnalysisPars(string analysisFilename)
                     numBinsS1 = stoi(lineElements[3]);
                 if(lineElements[1] == "numBinsS2")
                     numBinsS2 = stoi(lineElements[3]);
+                if(lineElements[1] == "numBinsZ")
+                    numBinsZ = stoi(lineElements[3]);
+                if(lineElements[1] == "numBinsR")
+                    numBinsR = stoi(lineElements[3]);
                 if(lineElements[1] == "minS2")
                     minS2 = stof(lineElements[3]);
                 if(lineElements[1] == "maxS2")
