@@ -28,7 +28,7 @@ int main(int argc, char** argv)
     NuisParam = {11.,1.1,0.0480,-0.0533,12.6,0.3,2.,0.3,2.,0.5,1., 1.},
     // alpha,beta,gamma,delta,epsilon,zeta,eta,theta,iota for NR model
     // last 3 are the secret extra parameters for additional flexibility
- //   FreeParam = {-0.1,0.5,0.06,-0.6,1.11,0.95,0.08,0.08};
+    //  FreeParam = {-0.1,0.5,0.06,-0.6,1.11,0.95,0.08,0.08};
     FreeParam = {1,1,0.07,0.5,0.19,2.25};
     // Fi, Fex, and 3 non-binomial recombination fluctuation parameters
     string position, delimiter, token;
@@ -221,7 +221,7 @@ int main(int argc, char** argv)
     setAnalysisPars(analysisFilename);
     outStream << "using the " << (analysisFilename!="-1" ? analysisFilename : "default" ) << " analysis file" << std::endl;
     if (verbose==1) verbosity=true; //overwrite analysis with command line arg
-cout << numBinsZ << " " << numBinsR << endl;    
+
     //set up array for binned data storage
 
     int**** s1s2RZbins;
@@ -471,7 +471,6 @@ cout << numBinsZ << " " << numBinsR << endl;
     vector<double> g2_params = n.CalculateG2(verbosity);
     g2 = fabs(g2_params[3]);
     double g1 = detector->get_g1();
-cout << rho << endl;
     double centralZ =
       (detector->get_gate() - 130. + detector->get_cathode() + 20) /
       2.;  // fid vol def usually shave more off the top, because of gas
@@ -572,7 +571,7 @@ cout << rho << endl;
     if(usePosition==1)
     {
         outputPars+=2;
-        header.append("r[mm]\tz[us]\t\t");
+        header.append("x[mm]\ty[mm]\tz[mm]\t\t");
     }
     if(MCtruthE == false && verbosity == true)
     {
@@ -693,7 +692,7 @@ cout << rho << endl;
                     i++;
                 }
                 pos_z = stof(position);
-                if (stof(position) == -1.)
+                if (stof(position) == -1.) //choose a random position
                     pos_z =
                         0. +
                         (detector->get_TopDrift() - 0.) * RandomGen::rndm()->rand_uniform();
@@ -708,8 +707,14 @@ cout << rho << endl;
             }
             if (spec.spline_spectrum_prep.MFP!=-1) //if this is a beam with small MFP then place collision along x axis, MFP is calculated at density of 3g/cm3
             {
-                pos_x = spec.spline_spectrum_prep.MFP*rho/3*log(1/(1-RandomGen::rndm()->rand_uniform()))-detector->get_radmax();
-                pos_y = 0;
+                r=1.e10;
+                while(r>detector->get_radmax())
+                {
+                    pos_x = spec.spline_spectrum_prep.MFP*rho/3*log(1/(1-RandomGen::rndm()->rand_uniform()))-detector->get_radmax();
+                    pos_y = RandomGen::rndm()->rand_gauss(0,spec.spline_spectrum_prep.beamWidth);
+                    pos_z = RandomGen::rndm()->rand_gauss(0.5*detector->get_TopDrift(),spec.spline_spectrum_prep.beamWidth);
+                    r = sqrt(pow(pos_x,2)+pow(pos_y,2));
+                }
             }
 
             if (inField == -1.) 
@@ -818,6 +823,7 @@ cout << rho << endl;
             // resolution function
             double truthPos[3] = {pos_x, pos_y, pos_z};
             double smearPos[3] = {pos_x, pos_y, pos_z};
+            smearRad = sqrt(pow(smearPos[0],2) + pow(smearPos[1],2));
             double Nphd_S2 =
                 g2 * quanta.electrons * exp(-driftTime / detector->get_eLife_us());
             if (!MCtruthPos && Nphd_S2 > PHE_MIN) 
@@ -833,12 +839,12 @@ cout << rho << endl;
             vector<double> wf_amp;
             vector<double> scint =
                 n.GetS1(quanta, truthPos[0], truthPos[1], truthPos[2], smearPos[0],smearPos[1],smearPos[2], vD, vD_middle, type_num, j, field,
-                        keV, useTiming, verbosity, wf_time, wf_amp);
+                        keV, NEST::S1CalculationMode::Full, verbosity, wf_time, wf_amp);
             if (truthPos[2] < detector->get_cathode()) 
                 quanta.electrons = 0;
             vector<double> scint2 = 
                 n.GetS2(quanta.electrons, truthPos[0], truthPos[1], truthPos[2], smearPos[0],smearPos[1],smearPos[2], driftTime, vD, j, field,
-                        useTiming, verbosity, wf_time, wf_amp, g2_params);
+                        NEST::S2CalculationMode::Full, verbosity, wf_time, wf_amp, g2_params);
 
 
             if (usePD == 0 && fabs(scint[2+useCorrected]) > minS1 && scint[2+useCorrected] < maxS1)
@@ -859,7 +865,7 @@ cout << rho << endl;
             if(signal1 > 0 && signal2 > 0 ) //&&  migdalE[0] > 0
             {
                 //inside fiducial vol?
-                if( smearRad<maxR && smearPos[2]<maxZ && smearPos[2] > minZ)
+                if( !doFiducialCut && smearRad<maxR && smearPos[2]<maxZ && smearPos[2] > minZ)
                 {
                     double keVtrue = keV;
                     if (!MCtruthE)
@@ -917,7 +923,7 @@ cout << rho << endl;
                         if(useTiming==2)
                             tempString << scint2[9] << "\t\t";
                         if(usePosition==1)
-                            tempString << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
+                            tempString << smearPos[0] << "\t" << smearPos[1] << "\t" << smearPos[2] << "\t\t";//tempString << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
                         if(MCtruthE == false && verbosity == true)
                             tempString << keVtrue << "\t\t";
                         if(outputLindhard == 1)
