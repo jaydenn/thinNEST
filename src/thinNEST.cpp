@@ -243,7 +243,11 @@ int main(int argc, char** argv)
     }
 
     double s1binWidth = (maxS1-minS1)/numBinsS1;
-    maxR*=detector->get_radius(); minR*=detector->get_radius();
+    if (doFiducialCut)
+        maxR*=detector->get_radius(); 
+    else
+        maxR*=detector->get_radmax();
+    minR*=detector->get_radius();
     double RbinWidth = (maxR-minR)/numBinsR;
     double s2binWidth;
     if(logS2==1)
@@ -518,7 +522,9 @@ int main(int argc, char** argv)
         else
             cerr << "\nWARNING: Your energy maximum may be too high given your maxS1.\n";
     }
-    int vD_middle;
+    double vD_middle;
+    //for now dont support variable field
+    inField = detector->get_driftField();
     if (inField == -1.)
     {
         // build a vD table for non-uniform field, but if field varies in XY not
@@ -530,13 +536,23 @@ int main(int argc, char** argv)
     }
     else
         vD_middle = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, inField);
-    
+
     //setup fiducial volume depths now that we have velocity - ASSUMING CONSTANT FIELD
-    maxZ=detector->get_dt_max()*vTable[vD_middle];minZ=detector->get_dt_min()*vTable[vD_middle];
+    if(doFiducialCut)
+    {
+        maxZ=detector->get_TopDrift()-detector->get_dt_min()*vD_middle;
+        minZ=detector->get_TopDrift()-detector->get_dt_max()*vD_middle;
+    }
+    else
+    {
+        maxZ=detector->get_TopDrift();
+        minZ=0;
+    }
+
     double ZbinWidth = (maxZ-minZ)/numBinsZ; 
 
     if(verbose==1)
-        cout << "drift velocity in middle: " << vTable[vD_middle] << " mm/us";
+        cout << "drift velocity in middle: " << vD_middle << " mm/us";
     cout << endl;
     double keV = -999.;
     vector<double> migdalE = {0,0};
@@ -656,7 +672,6 @@ int main(int argc, char** argv)
         //migdalE[0]+=migdalE[1];
         //migdalE[1]=0;
         //
-        
             if (type_num != WIMP && type_num != B8 && eMax > 0.) 
             {
                 if (keV > eMax) 
@@ -708,7 +723,7 @@ int main(int argc, char** argv)
             if (spec.spline_spectrum_prep.MFP!=-1) //if this is a beam with small MFP then place collision along x axis, MFP is calculated at density of 3g/cm3
             {
                 r=1.e10;
-                while(r>detector->get_radmax())
+                while(r>detector->get_radmax() || pos_z > detector->get_TopDrift() || pos_z < 0)
                 {
                     pos_x = spec.spline_spectrum_prep.MFP*rho/3*log(1/(1-RandomGen::rndm()->rand_uniform()))-detector->get_radmax();
                     pos_y = RandomGen::rndm()->rand_gauss(0,spec.spline_spectrum_prep.beamWidth);
@@ -755,7 +770,7 @@ int main(int argc, char** argv)
             }
             if ((driftTime > detector->get_dt_max() ||
                  driftTime < detector->get_dt_min()) &&
-                (fPos == -1. || stof(position) == -1.) && field >= FIELD_MIN)
+                (fPos == -1. || stof(position) == -1.) && field >= FIELD_MIN && doFiducialCut)
                 goto Z_NEW;
             if (detector->get_dt_max() > (detector->get_TopDrift() - 0.) / vD && !j &&
                 field >= FIELD_MIN) 
@@ -823,6 +838,7 @@ int main(int argc, char** argv)
             // resolution function
             double truthPos[3] = {pos_x, pos_y, pos_z};
             double smearPos[3] = {pos_x, pos_y, pos_z};
+        
             smearRad = sqrt(pow(smearPos[0],2) + pow(smearPos[1],2));
             double Nphd_S2 =
                 g2 * quanta.electrons * exp(-driftTime / detector->get_eLife_us());
@@ -846,7 +862,6 @@ int main(int argc, char** argv)
                 n.GetS2(quanta.electrons, truthPos[0], truthPos[1], truthPos[2], smearPos[0],smearPos[1],smearPos[2], driftTime, vD, j, field,
                         NEST::S2CalculationMode::Full, verbosity, wf_time, wf_amp, g2_params);
 
-
             if (usePD == 0 && fabs(scint[2+useCorrected]) > minS1 && scint[2+useCorrected] < maxS1)
                 signal1=scint[2+useCorrected];
             else if (usePD == 1 && fabs(scint[4+useCorrected]) > minS1 && scint[4+useCorrected] < maxS1)
@@ -862,10 +877,12 @@ int main(int argc, char** argv)
                 signal2=scint2[6+useCorrected];  // no spike option for S2
             else
                 signal2=-999.;
+
             if(signal1 > 0 && signal2 > 0 ) //&&  migdalE[0] > 0
             {
+            
                 //inside fiducial vol?
-                if( !doFiducialCut && smearRad<maxR && smearPos[2]<maxZ && smearPos[2] > minZ)
+                if( smearRad<maxR && smearPos[2]<maxZ && smearPos[2] > minZ)
                 {
                     double keVtrue = keV;
                     if (!MCtruthE)
@@ -1118,6 +1135,8 @@ void setAnalysisPars(string analysisFilename)
                     MCtruthE = b;
                 if(lineElements[1] == "MCtruthPos")
                     MCtruthPos = b;
+                if(lineElements[1] == "doFiducialCut")
+                    doFiducialCut = b;
                 if(lineElements[1] == "useTiming")
                     useTiming = stoi(lineElements[3]);
                 if(lineElements[1] == "usePD")
