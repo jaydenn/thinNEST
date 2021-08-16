@@ -66,6 +66,7 @@ class TestSpectra {
     bool doMig = 0;
     double monoE = 0;
     double MFP = -1;
+    double beamWidth = -1;
   };
   SPLINE_spectrum_prep spline_spectrum_prep;
   

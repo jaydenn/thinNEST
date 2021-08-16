@@ -37,7 +37,7 @@ class Detector_def : public VDetector {
     coinLevel = 2;   // how many PMTs have to fire for an S1 to count
     numPMTs = 1200;   // For coincidence calculation
 
-    extraPhot=false;  // for matching EXO-200's W measurement
+    //extraPhot=false;  // for matching EXO-200's W measurement
     noiseL[0] = 3e-2;  // S1->S1 Gaussian-smeared with noiseL[0]*S1
     noiseL[1] = 3e-2;  // S2->S2 Gaussian-smeared with noiseL[1]*S2
     

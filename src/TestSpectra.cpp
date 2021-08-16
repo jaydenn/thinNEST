@@ -595,7 +595,7 @@ TestSpectra::SPLINE_spectrum_prep TestSpectra::SPLINE_read_spectrum_file(const s
         spectrum.type = "NR";
         RFF >> spectrum.subType >> spectrum.monoE;
         RFF >> spectrum.subType >> spectrum.MFP; //mean free path in mm
-            ;//maybe need to do something else
+        RFF >> spectrum.subType >> spectrum.beamWidth; //gaussian beam width in mm
     }
     double* Er = new double[10000]();
     double* Rate = new double[10000]();
