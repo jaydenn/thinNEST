@@ -421,10 +421,11 @@ int main(int argc, char** argv)
 
     if (migdal==1)
     {
+        int migdalOptimize = 0; //this does not yet work and so is not an accessible option
         spec.doMigdal = 1;
         cout << "initializing migdal calc.." << endl;
-        init_Znl();
-        calcMigdalSpectrum(&(spec.spline_spectrum_prep)); //optional
+        init_Znl(spec.spline_spectrum_prep.monoE, mig_type, migdalOptimize);
+        //calcMigdalSpectrum(&(spec.spline_spectrum_prep)); //optional
     }
     else
         spec.doMigdal = 0;
@@ -555,7 +556,7 @@ int main(int argc, char** argv)
         cout << "drift velocity in middle: " << vD_middle << " mm/us";
     cout << endl;
     double keV = -999.;
-    vector<double> migdalE = {0,0};
+    vector<double> migdalE = {0,0,0,0};
     string corr="";
     string unit="[phd]";
     string header="E[keV]\t\t";
@@ -577,7 +578,7 @@ int main(int argc, char** argv)
     if(spec.doMigdal == 1 && verbosity == true)
     {
         outputPars+=2;
-        header.append("migE[keV]\tmigA[keV]\tmigN\t\t");
+        header.append("migE[keV]\t\tmigA[keV]\t\tmigN\t\t");
     }
     if(useTiming==2)
     {
@@ -665,13 +666,16 @@ int main(int argc, char** argv)
                 }
             }
             if (migdal == 1 && type_num == NR)
-                migdalE = rand_migdalE(keV,mig_type,spec.spline_spectrum_prep.monoE);  // Returns tuple of [electron energy, binding energy of shell, shell index]
+                migdalE = rand_migdalE(keV,mig_type,spec.spline_spectrum_prep.monoE);  // Returns tuple of [electron energy, binding energy of shell, shell index, mass number of recoiling xe atom]
         
         //EDITED for testing
+        //if (migdalE[0]>0)
+        //    outStream << keV << "  " << migdalE[0] << "  " << migdalE[1] << "  " << migdalE[2] << endl;
+        //continue;
         //cout << "testing Migdal energy, do not use for real results\n";
         //migdalE[0]+=migdalE[1];
         //migdalE[1]=0;
-        //
+        
             if (type_num != WIMP && type_num != B8 && eMax > 0.) 
             {
                 if (keV > eMax) 
@@ -802,15 +806,15 @@ int main(int argc, char** argv)
                 if (keV > .001 * Wq_eV || migdalE[0] > 0) 
                 {
                     
-                    yields = n.GetYields(type_num, keV, rho, field, double(massNum),
+                    yields = n.GetYields(type_num, keV, rho, field, double(migdalE[3]),
                                      double(atomNum), NuisParam);
                     if (spec.isLshell==1)
                         yields.ElectronYield*=0.9165;
                     if (migdal == 1 && type_num == NR && migdalE[0] > 0)
                     { 
-                        yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(massNum),
+                        yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(migdalE[3]),
                                      double(atomNum), NuisParam);
-                        yieldsMigGam = n.GetYields(beta, migdalE[1], rho, field, double(massNum),
+                        yieldsMigGam = n.GetYields(beta, migdalE[1], rho, field, double(migdalE[3]),
                                      double(atomNum), NuisParam);
                         if (int(migdalE[2]) == 2)   
                             yieldsMigGam.ElectronYield *= 0.9165;            
@@ -905,7 +909,7 @@ int main(int argc, char** argv)
                         if (yields.Lindhard > DBL_MIN && Nph > 0. && Ne > 0.) 
                         {
                             keV = (Nph + Ne) * Wq_eV * 1e-3 / yields.Lindhard;
-                            //keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
+                            keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
                                                                 // both places, but won't account
                                                                 // for density dependence
                         }
