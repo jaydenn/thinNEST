@@ -48,7 +48,7 @@ int main(int argc, char** argv)
     double inField = -1;
     position = "-1";
     double fPos = -1;
-    int migdal=0; int mig_type = 0;
+    int migdal=0; int mig_type = 0; int migdalOptimize = 0;
     int seed=-1; 
     //int doCalibration = false;
     int verbose=0;
@@ -66,6 +66,7 @@ int main(int argc, char** argv)
     {
         {"help",         no_argument,        0, 'h'},
         {"migdal",       no_argument,        0, 'm'},
+        {"migdal (opt.)",no_argument,        0, 'M'},
         {"binned",       no_argument,        0, 'b'},
         //{"calibrate",   no_argument,        0, 'c'},
         {"timing",       no_argument,        0, 't'},
@@ -95,13 +96,19 @@ int main(int argc, char** argv)
     int longindex;
     while(iarg != -1)
     {
-        iarg = getopt_long(argc, argv, "hmbtvpqlrROn:N:s:f:d:P:e:E:f:S:a:o:", longopts, &longindex);
+        iarg = getopt_long(argc, argv, "hmbtvpqlrROMn:N:s:f:d:P:e:E:f:S:a:o:", longopts, &longindex);
 
         switch (iarg)
         {
             case 'm':
                 migdal = 1;
                 break;
+            case 'M':
+            {
+                migdal = 1;
+                migdalOptimize=1;
+                break;
+            }
             case 't':
                 useTiming = 2;
                 break;
@@ -188,6 +195,7 @@ int main(int argc, char** argv)
                      << "\t-q, --outputQuanta\tcontrols what is saved in output\n"
                      << "\t-t, --timing\tinclude s2-width calculation\n"
                      << "\t-m, --migdal\tinclude the migdal effect for NR\n"
+                     << "\t-M, --migdal\tinclude the migdal effect for NR (optimized, relative NR/Mig rate will be unphysical)\n"
                      << "\t-n, --numEvents N\tsimulate N events\n"
                      << "\t-a, --analysis analysis_file\n"
                      << "\t-d, --detector detector_file\n"
@@ -388,6 +396,10 @@ int main(int argc, char** argv)
            type == "muon" || type == "MIP" || type == "LIP" || type == "mu" ||
            type == "mu-")
         type_num = beta;  // default electron recoil model
+    else if (type == "RNC")
+    {
+        type_num = gammaRay;
+    }
     else 
     {
         cerr << "UNRECOGNIZED PARTICLE TYPE!! VALID OPTIONS ARE:" << endl;
@@ -412,7 +424,7 @@ int main(int argc, char** argv)
     if (eMin == -1.)
         eMin = 0.;
     if (eMax == -1. && eMin == 0.)
-        eMax = 1e2;  // the default energy max is 100 keV
+        eMax = 1e4;  // the default energy max is 10 MeV
     if (eMax == 0.) 
     {
         cerr << "ERROR: The maximum energy cannot be 0 keV!" << endl;
@@ -421,7 +433,6 @@ int main(int argc, char** argv)
 
     if (migdal==1)
     {
-        int migdalOptimize = 0; //this does not yet work and so is not an accessible option
         spec.doMigdal = 1;
         cout << "initializing migdal calc.." << endl;
         init_Znl(spec.spline_spectrum_prep.monoE, mig_type, migdalOptimize);
@@ -663,11 +674,12 @@ int main(int argc, char** argv)
                             }
                             break;
                     }
+                    if(type == "RNC")
+                        keV = spec.radNC_spectrum();
                 }
             }
             if (migdal == 1 && type_num == NR)
                 migdalE = rand_migdalE(keV,mig_type,spec.spline_spectrum_prep.monoE);  // Returns tuple of [electron energy, binding energy of shell, shell index, mass number of recoiling xe atom]
-        
         //EDITED for testing
         //if (migdalE[0]>0)
         //    outStream << keV << "  " << migdalE[0] << "  " << migdalE[1] << "  " << migdalE[2] << endl;
@@ -724,14 +736,15 @@ int main(int argc, char** argv)
                 }
                 // if ( j == 0 ) { origX = pos_x; origY = pos_y; }
             }
-            if (spec.spline_spectrum_prep.MFP!=-1) //if this is a beam with small MFP then place collision along x axis, MFP is calculated at density of 3g/cm3
+            if (spec.spline_spectrum_prep.MFP!=-1) //if this is a beam with small MFP then place collision along x axis, MFP is calculated at density of 3g/cm3 so we correct for that here
             {
                 r=1.e10;
                 while(r>detector->get_radmax() || pos_z > detector->get_TopDrift() || pos_z < 0)
                 {
-                    pos_x = spec.spline_spectrum_prep.MFP*rho/3*log(1/(1-RandomGen::rndm()->rand_uniform()))-detector->get_radmax();
+                    //gaussian beam profile:
                     pos_y = RandomGen::rndm()->rand_gauss(0,spec.spline_spectrum_prep.beamWidth);
                     pos_z = RandomGen::rndm()->rand_gauss(0.5*detector->get_TopDrift(),spec.spline_spectrum_prep.beamWidth);
+                    pos_x = spec.spline_spectrum_prep.MFP*rho/3*log(1/(1-RandomGen::rndm()->rand_uniform()))-sqrt(pow(detector->get_radmax(),2)+pow(pos_y,2));
                     r = sqrt(pow(pos_x,2)+pow(pos_y,2));
                 }
             }
@@ -908,10 +921,11 @@ int main(int argc, char** argv)
                             Ne = 0.;
                         if (yields.Lindhard > DBL_MIN && Nph > 0. && Ne > 0.) 
                         {
-                            keV = (Nph + Ne) * Wq_eV * 1e-3 / yields.Lindhard;
-                            keVee = (Nph + Ne) * Wq_eV * 1e-3;  // as alternative, use W_DEFAULT in
-                                                                // both places, but won't account
-                                                                // for density dependence
+                            if(eeEnergy == true)
+                                keV = (Nph + Ne) * Wq_eV * 1e-3; 
+                            else
+                                keV = (Nph + Ne) * Wq_eV * 1e-3 / yields.Lindhard;
+                            
                         }
                         else
                             keV = 0.;
@@ -970,6 +984,8 @@ int main(int argc, char** argv)
     if( exposure == -1 && type == "file" && ratioEvents == 0)
         outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
     else if( exposure == -1 && type == "file" && ratioEvents == 1)
+        outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
+    else if( exposure == -1 && type == "RNC" )
         outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
     else
         outStream << "exposure: " << exposure << endl;
@@ -1091,7 +1107,7 @@ void setDetectorPars(string detectorName, Detector_def *detector)
                     detector->set_driftField(stof(lineElements[2]));
             }        
         }
-        detector->set_noiseB(noise[0],noise[1],noise[2],noise[3]);
+        detector->set_noiseBaseline(noise[0],noise[1],noise[2],noise[3]);
         lineElements.clear();
     }
     RFF.close();
