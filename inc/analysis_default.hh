@@ -9,6 +9,7 @@ bool outputQuanta = false;
 bool MCtruthE = false;    // false means reconstructed energy
 bool MCtruthPos = false;  // false means reconstructed position
 bool doFiducialCut = true;
+bool eeEnergy = false; //force electron equivalent energy for output
 
 int useTiming = 0;  // calculates S2 width, should rename this
 
