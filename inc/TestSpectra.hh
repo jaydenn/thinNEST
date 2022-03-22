@@ -100,6 +100,7 @@ class TestSpectra {
   double WIMP_spectrum(WIMP_spectrum_prep wprep, double mass);
   double ZeplinBackground();  // an example of how to do a better (non-flat) ER
                               // BG spectrum for a WS, from Henrique Araujo
+  double radNC_spectrum();
 };
 
 #endif /* TESTSPECTRA_HH */
