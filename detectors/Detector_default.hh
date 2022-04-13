@@ -18,6 +18,7 @@ class Detector_def : public VDetector {
   virtual ~Detector_def(){};
   
   double triggerIndex=0; //set trigger type defined in trigger.cpp
+  double driftField=0;
 
   // Do here the initialization of all the parameters that are not varying as a
   // function of time
@@ -213,6 +214,13 @@ class Detector_def : public VDetector {
     }
 
     return PEperBin;
+  }
+  
+  virtual double get_driftField() {
+    return driftField;
+  }
+  virtual void set_driftField(double df) {
+    driftField = df;
   }
 
 };
