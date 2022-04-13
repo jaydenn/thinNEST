@@ -1,7 +1,8 @@
+NESTDIR=../nest
 CC = g++
 FLAGS = -g -O2 -std=c++11 -Wall
 LIBS = -lgsl -lgslcblas -lstdc++ -lm -lNESTCore
-INCLUDE = -I./inc -I../nest/include/NEST -I../nest/include/Detectors -I./detectors -I../gcem/include
+INCLUDE = -I./inc -I${NESTDIR}/include/NEST -I${NESTDIR}/include/Detectors -I./detectors -I../gcem/include
 OBJECTS = src/TestSpectra.o src/migdalRate.o
 
 default: thinNEST

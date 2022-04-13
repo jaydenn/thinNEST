@@ -34,6 +34,10 @@ gsl_spline *Znl_spline[6][3];
 gsl_interp_accel *Znl_accel[6][3];
 gsl_spline *Znl_int_spline[6][3];
 gsl_interp_accel *Znl_int_accel[6][3];
+
+gsl_spline *invZnl_int_spline[6][3];
+gsl_interp_accel *invZnl_int_accel[6][3];
+
 double Znl_y_max[6][3];
 double Znl_x_max[6][3];
 double Znl_x_min[6][3];
@@ -69,9 +73,19 @@ double EMmaxNeutronER(double En, double ENR, double Mt)
     return 2.*sqrt(En*ENR*Mt/Mn) - ENR*(Mt+Mn)/Mn;
 }
 
+double EMmaxNeutrinoER(double Enu, double ENR, double Mt)
+{
+    return Enu-ENR;
+}
+
 double ERmaxNeutronEM(double En, double EM, double Mt)
 {
     return pow(mu(Mt,Mn),2)/(Mt*Mn)*En*(pow(1-sqrt(1-EM/(mu(Mt,Mn)*En/Mn)),2)+4*sqrt(1-EM/(mu(Mt,Mn)*En/Mn)));
+}
+
+double ERmaxNeutrinoEM(double Enu, double EM, double Mt)
+{
+    return pow(2.*Enu - EM,2)/(2.*(2.*Enu+Mt));
 }
 
 double totalMigProb(double maxE, double ENR, double Mt, int mig_type)
@@ -80,9 +94,7 @@ double totalMigProb(double maxE, double ENR, double Mt, int mig_type)
     if (mig_type == 1)
         maxEM  = EMmaxNeutronER(maxE, ENR, Mt);
     if (mig_type == 2)
-    {
-        maxEM = 100;
-    }    
+        maxEM = EMmaxNeutrinoER(maxE, ENR, Mt);
     if (mig_type == 3)
     {
         maxEM = 0; //need to define
@@ -154,13 +166,17 @@ void init_Znl(double maxE, int mig_type, int migdalOptimize)
     {
         for(l=0; l<Nlmax[n]; l++)
         {
-            for(int j=0; j<250; j++)
+            for(int j=0; j<251; j++)
             {
                 Znl_int[j] = gsl_spline_eval_integ(Znl_spline[n][l], Znl_x_min[n][l], EMnl[n][l][j], Znl_accel[n][l]);
             }
             Znl_int_spline[n][l] = gsl_spline_alloc(gsl_interp_linear, 251);
             Znl_int_accel[n][l] = gsl_interp_accel_alloc();
             gsl_spline_init(Znl_int_spline[n][l], EMnl[n][l], Znl_int, 251);
+            
+            invZnl_int_spline[n][l] = gsl_spline_alloc(gsl_interp_linear, 251);
+            invZnl_int_accel[n][l] = gsl_interp_accel_alloc();
+            gsl_spline_init(invZnl_int_spline[n][l], Znl_int, EMnl[n][l], 251);
         }
     }
     
@@ -175,7 +191,7 @@ void init_Znl(double maxE, int mig_type, int migdalOptimize)
     }
     if (mig_type == 2)
     {
-        maxENR = 0; //need to define
+        maxENR =  ERmaxNeutrinoEM(maxE,0,128*AMU);
     }    
     if (mig_type == 3)
     {
@@ -185,16 +201,16 @@ void init_Znl(double maxE, int mig_type, int migdalOptimize)
     //find maximum probability and normalize to it
     if(migdalOptimize==1)
     {
-        cout << "optimizing migdal probabilities.." << endl;
+        cout << "optimizing migdal probabilities..";
         double maxProb = 0;
-        double nr = .1;
+        double nr = .001;
         while (totalMigProb(maxE, nr, 128*AMU, mig_type) > maxProb && nr < maxENR)
         {
             maxProb = totalMigProb(maxE, nr, 128*AMU, mig_type);
             nr*=1.001;
         }
-        
         maxCumulativeProb = maxProb;
+        cout << " Migdal probabilities *~= " << 1/maxCumulativeProb << endl;
     }
 
 }
@@ -206,9 +222,9 @@ double Z_nl(int N, int l, double Qe, double Ee)
         return 0;
     }
     else if ( Ee < .001 )
-        return (pow((Qe / 0.001),2) / maxCumulativeProb) * gsl_spline_eval(Znl_spline[N][l], 0.001, Znl_accel[N][l]);
+        return (pow((Qe / 0.001),2) ) * gsl_spline_eval(Znl_spline[N][l], 0.001, Znl_accel[N][l]);
     else
-        return (pow((Qe / 0.001),2) / maxCumulativeProb) * gsl_spline_eval(Znl_spline[N][l], Ee, Znl_accel[N][l]);
+        return (pow((Qe / 0.001),2) ) * gsl_spline_eval(Znl_spline[N][l], Ee, Znl_accel[N][l]);
 }
 
 //returns total prob below max_Ee
@@ -216,13 +232,22 @@ double Z_nl_integrated(int N, int l, double Qe, double max_Ee)
 { 
     if ( max_Ee > 69.9 )
     {
-        return (pow((Qe / 0.001),2) / maxCumulativeProb) * gsl_spline_eval(Znl_int_spline[N][l], 69.9, Znl_int_accel[N][l]);
+        return (pow((Qe / 0.001),2) ) * gsl_spline_eval(Znl_int_spline[N][l], 69.9, Znl_int_accel[N][l]);
     }
     else if ( max_Ee < .001 )
         return 0;
     else
-        return (pow((Qe / 0.001),2) / maxCumulativeProb) * gsl_spline_eval(Znl_int_spline[N][l], max_Ee, Znl_int_accel[N][l]);
+        return (pow((Qe / 0.001),2) ) * gsl_spline_eval(Znl_int_spline[N][l], max_Ee, Znl_int_accel[N][l]);
 }
+
+//returns total prob below max_Ee
+double invZ_nl_integrated(int N, int l, double Qe, double Znl)
+{ 
+    if(Znl>Z_nl_integrated( N, l, Qe, 70))
+    {    cout << "Prob. too high result may be skewed" << endl; return 70; }
+    return gsl_spline_eval(invZnl_int_spline[N][l], Znl/pow((Qe / 0.001),2), invZnl_int_accel[N][l]);
+}
+
 
 //returns maximum diff probability of ionization for a given level
 double Znl_max(int N, int l, double Qe)
@@ -242,9 +267,11 @@ double rand_xe_isotope(double ENR, double maxE, int mig_type)
             {
                 if(mig_type==1)
                     ERmax = ERmaxNeutron(maxE, Mn*isoTable[i]);
+                if(mig_type==2)
+                    ERmax = ERmaxNeutrinoEM(maxE, 0, Mn*isoTable[i]);
                 if( ENR < ERmax ) //ensures kinematic consistency
                     return isoTable[i];
-                if( ENR > ERmaxNeutron(maxE, Mn*129)) //speeds up case where only 128 is consistent
+                if( ENR > ERmaxNeutron(maxE, Mn*129) && mig_type == 1) //speeds up case where only 128 is consistent
                     return 128;
                 else
                     goto isoLoop;
@@ -253,7 +280,7 @@ double rand_xe_isotope(double ENR, double maxE, int mig_type)
         return 131.3; //in case something goes wrong
 }
 
-//eject a random electron? (proportional to prob)
+//Older (slower) Migdal calc
 vector<double> randAbs_migdalE(double ERnr, int mig_type, double monoE)
 {
     
@@ -262,43 +289,8 @@ vector<double> randAbs_migdalE(double ERnr, int mig_type, double monoE)
     if (mig_type == 1)
         maxEM = EMmaxNeutronER(monoE,ERnr,MtXe);
     if (mig_type == 2)
-        maxEM = 100;
-
-    double Ee,EeMax;
-
-    double t,prob=0;
-    t = RandomGen::rndm()->rand_uniform();
-    for(int N=1; N<6; N++)
-    {
-        for (int L=0; L<Nlmax[N]; L++)
-        {
-            EeMax = maxEM - nl_energy[N][L];
-            if (EeMax < 0)
-                continue;
-            prob+=Z_nl_integrated(N,L,qe(ERnr,MtXe),EeMax);
-            if(t<prob)
-            {
-                Ee = EeMax*RandomGen::rndm()->rand_uniform();
-                while(RandomGen::rndm()->rand_uniform()*Znl_max(N, L, qe(ERnr,MtXe)) > Z_nl(N, L, qe(ERnr,MtXe), Ee))
-                { 
-                    Ee = EeMax*RandomGen::rndm()->rand_uniform();
-                }
-                return {Ee,nl_energy[N][L],(double)N};
-            }
-        }
-    }
-    return {0,0,0};
-
-}
-
-vector<double> rand_migdalE(double ERnr, int mig_type, double monoE)
-{
-    
-    MtXe = AMU*rand_xe_isotope(ERnr, monoE, mig_type);
-    double maxEM=0;
-    if (mig_type == 1)
-        maxEM = EMmaxNeutronER(monoE,ERnr,MtXe);
-    if (mig_type == 2)
+        maxEM = EMmaxNeutrinoER(monoE,ERnr,MtXe);
+    if (mig_type == 3)
         maxEM = 100;
 
     double Ee,EeMax;
@@ -324,6 +316,47 @@ vector<double> rand_migdalE(double ERnr, int mig_type, double monoE)
                     { 
                         Ee = EeMax*RandomGen::rndm()->rand_uniform();
                     }
+                    return {Ee,nl_energy[N][L],(double)N,MtXe/AMU};
+                }
+            }
+        }
+    }
+    return {0,0,0,0};
+
+}
+
+//eject a random electron? (proportional to prob)
+vector<double> rand_migdalE(double ERnr, int mig_type, double maxE)
+{
+    MtXe = AMU*131.3;
+    double maxEM=0;
+    if (mig_type == 1)
+        maxEM = EMmaxNeutronER(maxE,ERnr,MtXe);
+    if (mig_type == 2)
+        maxEM = EMmaxNeutrinoER(maxE,ERnr,MtXe);
+    if (mig_type == 3)
+        maxEM = 100;
+
+    double Ee,EeMax;
+
+    double t,prob=0;
+    double maxProb=totalMigProb(maxE, ERnr, MtXe, mig_type)/maxCumulativeProb;
+
+    t = RandomGen::rndm()->rand_uniform();
+    if ( t < maxProb )
+    {
+        for(int N=1; N<6; N++)
+        {
+            for (int L=0; L<Nlmax[N]; L++)
+            {
+                EeMax = maxEM - nl_energy[N][L];
+                if (EeMax < 0)
+                    continue;
+                prob+=Z_nl_integrated(N,L,qe(ERnr,MtXe),EeMax)/maxCumulativeProb;
+                if( t < prob )
+                {
+                    t = RandomGen::rndm()->rand_uniform()*Z_nl_integrated(N,L,qe(ERnr,MtXe),EeMax);
+                    Ee = invZ_nl_integrated(N, L, qe(ERnr,MtXe), t);
                     return {Ee,nl_energy[N][L],(double)N,MtXe/AMU};
                 }
             }
