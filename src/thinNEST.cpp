@@ -193,19 +193,22 @@ int main(int argc, char** argv)
                      << "A lightweight and flexible code for running NEST simulations\n\n"
                      << "Options:\n"
                      << "\t-v, --verbose\tverbose output\n"
-                     << "\t-q, --outputQuanta\tcontrols what is saved in output\n"
                      << "\t-t, --timing\tinclude s2-width calculation\n"
                      << "\t-m, --migdal\tinclude the migdal effect for NR\n"
                      << "\t-M, --migdal\tinclude the migdal effect for NR (optimized, relative NR/Mig rate will be unphysical)\n"
                      << "\t-n, --numEvents N\tsimulate N events\n"
+                     << "\t-b, --binned \toutputs events binned in S1 and logS2 as specified in analysis file\n"
+                     << "\t-q, --outputQuanta\tincludes quanta for each event in output\n"
+                     << "\t-P, --eventPosition\tincludes position of each event in output\n"
                      << "\t-a, --analysis analysis_file\n"
                      << "\t-d, --detector detector_file\n"
                      << "\t-s, --spectrum {NR,ER,file=spectrum_file}\n"
                      << "\t-e, --eMin X\tstarts the spectrum at X keV, defaults to -1 (min in spectrum file)\n"
                      << "\t-E, --eMax X\tends the spectrum at X keV, defaults to -1 (max in spectrum file)\n"
                      << "\t-o, --output output_file, defaults to stdout\n"
-                     << "\t-f, --field V\tset E-field to V volts/cm\n"
-                     << "\t-r, --seed S\tuse the random seed S, defaults to sys clock\n";               
+                     << "\t-f, --field V\tset the drift field to V volts/cm\n"
+                     << "\t-S, --seed S\tuse the random seed S, defaults to sys clock\n"               
+                     << "\t-r, --progress \tgives percent done (out of number of samples) to stdout\n";               
                 return 0;
         }
 
