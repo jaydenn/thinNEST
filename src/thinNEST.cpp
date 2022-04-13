@@ -24,13 +24,14 @@ int main(int argc, char** argv)
 
     Detector_def* detector = new Detector_def();
     
-    vector<double> signalE, vTable, 
-    NuisParam = {11.,1.1,0.0480,-0.0533,12.6,0.3,2.,0.3,2.,0.5,1., 1.},
-    // alpha,beta,gamma,delta,epsilon,zeta,eta,theta,iota for NR model
-    // last 3 are the secret extra parameters for additional flexibility
-    //  FreeParam = {-0.1,0.5,0.06,-0.6,1.11,0.95,0.08,0.08};
-    FreeParam = {1,1,0.07,0.5,0.19,2.25};
+    vector<double> signalE, vTable, FreeParam,
+    freeParamDef = {1,1,0.1,0.5,0.19,2.25},
+    freeParamBeta = {0.5,0.5,1.1,-5.,1.01,0.95,1.4e-2,1.8e-2},
     // Fi, Fex, and 3 non-binomial recombination fluctuation parameters
+    NuisParam = {11.,1.1,0.0480,-0.0533,12.6,0.3,2.,0.3,2.,0.5,1., 1.};
+    // alpha,beta,gamma,delta,epsilon,zeta,eta,theta,iota for NR model
+    // last 3 are the secret extra parameters for additional flexibility - all parameter values current as of 03/2022
+
     string position, delimiter, token;
     size_t loc;
     double g2=0, atomNum = 0, massNum = 0;
@@ -421,6 +422,13 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    if (type_num == beta)
+        FreeParam = freeParamBeta;
+    else
+        FreeParam = freeParamDef;
+
+
+
     if (eMin == -1.)
         eMin = 0.;
     if (eMax == -1. && eMin == 0.)
@@ -477,12 +485,9 @@ int main(int argc, char** argv)
     }
     if (rho < 1.75) 
         detector->set_inGas(true);
-    double Wq_eV =
-      1.9896 +
-      (20.8 - 1.9896) /
-          (1. + pow(rho / 4.0434,
-                    1.4407));  // out-of-sync danger: copied from NEST.cpp
-
+    
+    double Wq_eV = NESTcalc::WorkFunction(rho,detector->get_molarMass()).Wq_eV;  // out-of-sync danger: copied from NEST.cpp
+    
     // Calculate and print g1, g2 parameters (once per detector)
     vector<double> g2_params = n.CalculateG2(verbosity);
     g2 = fabs(g2_params[3]);
@@ -534,20 +539,24 @@ int main(int argc, char** argv)
         else
             cerr << "\nWARNING: Your energy maximum may be too high given your maxS1.\n";
     }
+    
     double vD_middle;
     //for now dont support variable field
-    inField = detector->get_driftField();
-    if (inField == -1.)
-    {
+    if(inField == -1)
+        inField = detector->get_driftField();
+    
+    vD_middle = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, inField);
+    //if (inField == -1.)
+    //{
         // build a vD table for non-uniform field, but if field varies in XY not
         // just Z you need to do more coding
-        vTable = n.SetDriftVelocity_NonUniform(rho, z_step, 0, 0);
-        vD_middle = vTable[int(floor(centralZ / z_step + 0.5))];
+    //    vTable = n.SetDriftVelocity_NonUniform(rho, z_step, 0, 0);
+    //    vD_middle = vTable[int(floor(centralZ / z_step + 0.5))];
         // for ( int jj = 0; jj < vTable.size(); jj++ ) //DEBUG
         // cerr << double(jj)*z_step << "\t" << vTable[jj] << endl;
-    }
-    else
-        vD_middle = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, inField);
+    //}
+    //else
+    
 
     //setup fiducial volume depths now that we have velocity - ASSUMING CONSTANT FIELD
     if(doFiducialCut)
@@ -813,29 +822,41 @@ int main(int argc, char** argv)
             }
 
             YieldResult yields;
-            YieldResult yieldsMigE;
-            YieldResult yieldsMigGam;
             QuantaResult quanta;
+
                 if (keV > .001 * Wq_eV || migdalE[0] > 0) 
                 {
                     
                     yields = n.GetYields(type_num, keV, rho, field, double(migdalE[3]),
                                      double(atomNum), NuisParam);
-                    if (spec.isLshell==1)
-                        yields.ElectronYield*=0.9165;
+                    
                     if (migdal == 1 && type_num == NR && migdalE[0] > 0)
                     { 
+                        YieldResult yieldsMigE;   //migdal: ejected electron
+                        YieldResult yieldsMigDex; //migdal: de-excite atom
+                
                         yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(migdalE[3]),
                                      double(atomNum), NuisParam);
-                        yieldsMigGam = n.GetYields(beta, migdalE[1], rho, field, double(migdalE[3]),
+                        yieldsMigDex = n.GetYields(beta, migdalE[1], rho, field, double(migdalE[3]),
                                      double(atomNum), NuisParam);
-                        if (int(migdalE[2]) == 2)   
-                            yieldsMigGam.ElectronYield *= 0.9165;            
-                        yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigGam.PhotonYield;
-                        yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigGam.ElectronYield;
+                        
+                        //As of version 2.3 this doesn't appear to be necessary
+                        //if (int(migdalE[2]) == 2) //include this line for altering quanta from L-shell as observed in arXiv:2109.11487 
+                        //{
+                        //     double q = 0.91;      //this parameter may be weakly field dependent, this is for V=258V/cm
+                        //     yieldsMigDex.PhotonYield += (1-q)*yieldsMigDex.ElectronYield;            
+                        //     yieldsMigDex.ElectronYield *= q;     
+                        //}
+                        
+                        yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigDex.PhotonYield;
+                        yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigDex.ElectronYield;
                     }
                     quanta = n.GetQuanta(yields, rho, FreeParam);
-                    
+                    if (spec.isLshell==1)                 
+                    {    
+                        cout << "not yet implemented\n";
+                        return 0;
+                    }
                 }
                 else 
                 {
@@ -897,7 +918,6 @@ int main(int argc, char** argv)
 
             if(signal1 > 0 && signal2 > 0 ) //&&  migdalE[0] > 0
             {
-            
                 //inside fiducial vol?
                 if( smearRad<maxR && smearPos[2]<maxZ && smearPos[2] > minZ)
                 {
@@ -980,7 +1000,7 @@ int main(int argc, char** argv)
                 j--;
 
         }
-    
+    cout << numTrials << " " << spec.spline_spectrum_prep.totRate << endl;
     if( exposure == -1 && type == "file" && ratioEvents == 0)
         outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
     else if( exposure == -1 && type == "file" && ratioEvents == 1)
