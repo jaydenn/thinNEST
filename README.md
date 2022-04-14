@@ -18,7 +18,7 @@ First edit the Makefile to set the location of your NEST library directory (by d
 Then type 'make'.
 
 ## Running
-
+```
 Usage: thinNEST [OPTIONS]  
 
 Options:
@@ -39,3 +39,4 @@ Options:
 	-f, --field V	set the drift field to V volts/cm
 	-S, --seed S	use the random seed S, defaults to sys clock
 	-r, --progress 	gives percent done (out of number of samples) to stdout
+```
