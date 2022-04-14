@@ -1003,15 +1003,19 @@ int main(int argc, char** argv)
                 j--;
 
         }
-    cout << numTrials << " " << spec.spline_spectrum_prep.totRate << endl;
-    if( exposure == -1 && type == "file" && ratioEvents == 0)
-        outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
-    else if( exposure == -1 && type == "file" && ratioEvents == 1)
-        outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
-    else if( exposure == -1 && type == "RNC" )
-        outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
-    else
-        outStream << "exposure: " << exposure << endl;
+
+
+    if( type == "file" )
+    {
+        if( exposure == -1 && ratioEvents == 0)
+           outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
+        else if( exposure == -1 && type == "file" && ratioEvents == 1)
+           outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
+        else if( exposure == -1 && type == "RNC" )
+           outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
+        else
+            outStream << "exposure: " << exposure << endl;
+    }
 
     if(doBinning==1)
     {
