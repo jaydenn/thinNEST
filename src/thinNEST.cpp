@@ -981,7 +981,7 @@ int main(int argc, char** argv)
                         if(useTiming==2)
                             tempString << scint2[9] << "\t\t";
                         if(usePosition==1)
-                            tempString << smearPos[0] << "\t" << smearPos[1] << "\t" << smearPos[2] << "\t\t";//tempString << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
+                            tempString << fixed << setprecision(1) << smearPos[0] << "\t" << smearPos[1] << "\t" << smearPos[2] << "\t\t";//tempString << sqrt(pow(smearPos[0],2)+pow(smearPos[1],2)) << "\t" << smearPos[2] << "\t\t";
                         if(MCtruthE == false && verbosity == true)
                             tempString << keVtrue << "\t\t";
                         if(outputLindhard == 1)
