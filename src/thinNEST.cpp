@@ -21,9 +21,10 @@ void setAnalysisPars(string analysisFilename);
 
 int main(int argc, char** argv) 
 {
-
+    //create detector object
     Detector_def* detector = new Detector_def();
     
+    //set some parameters that nest uses as input for it's yield calculations (these are default values from nest)
     vector<double> signalE, vTable, FreeParam,
     freeParamDef = {1,1,0.1,0.5,0.19,2.25},
     freeParamBeta = {0.5,0.5,1.1,-5.,1.01,0.95,1.4e-2,1.8e-2},
@@ -32,6 +33,8 @@ int main(int argc, char** argv)
     // alpha,beta,gamma,delta,epsilon,zeta,eta,theta,iota for NR model
     // last 3 are the secret extra parameters for additional flexibility - all parameter values current as of 03/2022
 
+
+    //define a bunch of variables
     string position, delimiter, token;
     size_t loc;
     double g2=0, atomNum = 0, massNum = 0;
@@ -51,7 +54,6 @@ int main(int argc, char** argv)
     double fPos = -1;
     int migdal=0; int mig_type = 0; int migdalOptimize = 0;
     int seed=-1; 
-    //int doCalibration = false;
     int verbose=0;
     int progress=0;
     int outputQuanta=0;
@@ -63,13 +65,13 @@ int main(int argc, char** argv)
     double wimpCS=1e-35;
     int ratioEvents = 0;
     
+    //set up the options for the code
     const struct option longopts[] =
     {
         {"help",         no_argument,        0, 'h'},
         {"migdal",       no_argument,        0, 'm'},
         {"migdal (opt.)",no_argument,        0, 'M'},
         {"binned",       no_argument,        0, 'b'},
-        //{"calibrate",   no_argument,        0, 'c'},
         {"timing",       no_argument,        0, 't'},
         {"verbose",      no_argument,        0, 'v'},
         {"outputQuanta", no_argument,        0, 'q'},
@@ -128,9 +130,6 @@ int main(int argc, char** argv)
             case 'p':
                 usePosition = 1;
                 break;
-            //case 'c': 
-            //    doCalibration = true;
-            //    break;
             case 'O':
                 optimizeROI = 1;
                 break;
@@ -213,13 +212,14 @@ int main(int argc, char** argv)
         }
 
     }
-     
+    
+    //set random seed or take it from the clock (default)
     if (seed == -1)
         RandomGen::rndm()->SetSeed(time(NULL));
     else
         RandomGen::rndm()->SetSeed(seed);
 
-    //open file for output
+    //open file for output or use cout (default)
     ofstream outputFile; 
     if(outputFilename!="-1")
         outputFile.open (outputFilename);
@@ -235,11 +235,9 @@ int main(int argc, char** argv)
     if (verbose==1) verbosity=true; //overwrite analysis with command line arg
 
     //set up array for binned data storage
-
     int**** s1s2RZbins;
     if(usePosition!=1 && doBinning==1)
         numBinsZ = numBinsR = 1;
- 
     s1s2RZbins = new int***[numBinsS1];
     for(int i = 0; i < numBinsS1; ++i)
     {
@@ -253,7 +251,8 @@ int main(int argc, char** argv)
             }
         }
     }
-
+    
+    //calculate bin widths
     double s1binWidth = (maxS1-minS1)/numBinsS1;
     if (doFiducialCut)
         maxR*=detector->get_radius(); 
@@ -273,6 +272,7 @@ int main(int argc, char** argv)
     INTERACTION_TYPE type_num;
     TestSpectra spec;
 
+    //do some basic checks of detector geometry
     if (detector->get_TopDrift() <= 0. || detector->get_anode() <= 0. ||
         detector->get_gate() <= 0.) 
     {
@@ -280,8 +280,11 @@ int main(int argc, char** argv)
             "geometry.";  // negative or 0 for cathode position is OK (e.g., LZ)
         return 0;
     }
-
+    
+    //print out type of spectrum being simulated
     outStream << "spectrum type: " << (type=="file" ? "file ("+spectrumFilename+")" : type ) << endl;
+    
+    //set up the spectrum when using a precomputed recoil spectrum from a file
     if (type == "file")
     {
     
@@ -292,7 +295,8 @@ int main(int argc, char** argv)
         eMin = spec.spline_spectrum_prep.xMin;
         eMax = spec.spline_spectrum_prep.xMax;
 
-        if (spec.spline_spectrum_prep.type == "NR")
+        //get the type of spectrum from first line
+        if (spec.spline_spectrum_prep.type == "NR" || spec.spline_spectrum_prep.type == "neutronB")
             type_num = NR;
         else if (spec.spline_spectrum_prep.type == "ER")
             type_num = beta;
@@ -301,16 +305,13 @@ int main(int argc, char** argv)
             spec.isLshell=1;
             type_num = beta;
         }
-        else if (spec.spline_spectrum_prep.type == "neutronB")
-        {
-            type_num = NR;
-        }
         else
         {
             cerr << "type " << spec.spline_spectrum_prep.type << " not recognized\n";
             assert(0);
         }
         
+        //extra options of the type of spectrum which can also affect calculation of the Migdal effect
         if (spec.spline_spectrum_prep.subType == "monoE")
             mig_type = 1;
         else if (spec.spline_spectrum_prep.subType == "neutrino")
@@ -333,12 +334,8 @@ int main(int argc, char** argv)
             cout << "simulating " << numEvents << " events\n";
 
     }    
-    else if (type == "neutronM")
-    {
-       type_num = NR;
-    }
-    else if (type == "NR" || type == "neutron" || type == "-1")
-       type_num = NR;  //-1: default particle type is also NR
+    else if (type == "NR" || type == "neutron" || type == "-1" || type == "neutronM") //-1: default particle type is also NR
+       type_num = NR;  
     else if (type == "WIMP")
     {
         if (wimpMass < 0.44) 
@@ -425,13 +422,13 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    //set NEST parameters based on recoil type (ER or NR)
     if (type_num == beta)
         FreeParam = freeParamBeta;
     else
         FreeParam = freeParamDef;
 
-
-
+    //checks on energy range of recoils
     if (eMin == -1.)
         eMin = 0.;
     if (eMax == -1. && eMin == 0.)
@@ -442,12 +439,14 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    //if including the Migdal effect do some setup
     if (migdal==1)
     {
         spec.doMigdal = 1;
         cout << "initializing migdal calc.." << endl;
         init_Znl(spec.spline_spectrum_prep.monoE, mig_type, migdalOptimize);
-        //calcMigdalSpectrum(&(spec.spline_spectrum_prep)); //optional
+        //optional output theoretical spectrum [currently turned off]
+        //calcMigdalSpectrum(&(spec.spline_spectrum_prep));
     }
     else
         spec.doMigdal = 0;
@@ -479,6 +478,7 @@ int main(int argc, char** argv)
          << endl;
     }
 
+    //get density of the xenon based on temp and pressure
     double rho = n.SetDensity(detector->get_T_Kelvin(), detector->get_p_bar());
     if (rho <= 0. || detector->get_T_Kelvin() <= 0. ||
         detector->get_p_bar() <= 0.) 
@@ -489,6 +489,7 @@ int main(int argc, char** argv)
     if (rho < 1.75) 
         detector->set_inGas(true);
     
+    //get work function based on density
     double Wq_eV = NESTcalc::WorkFunction(rho,detector->get_molarMass()).Wq_eV;  // out-of-sync danger: copied from NEST.cpp
     
     // Calculate and print g1, g2 parameters (once per detector)
@@ -534,13 +535,7 @@ int main(int argc, char** argv)
     }
     if ((g1 * yieldsMax.PhotonYield) > (2. * maxS1) && eMin != eMax)
     {
-        if(optimizeROI==1)
-        {
-            cout << "Optimizing ROI\n";
-            maxS1 = g1 * yieldsMax.PhotonYield;
-        }
-        else
-            cerr << "\nWARNING: Your energy maximum may be too high given your maxS1.\n";
+        cerr << "\nWARNING: Your energy maximum may be too high given your maxS1.\n";
     }
     
     double vD_middle;
@@ -572,14 +567,17 @@ int main(int argc, char** argv)
         maxZ=detector->get_TopDrift();
         minZ=0;
     }
-
+    //set bin width in z direction
     double ZbinWidth = (maxZ-minZ)/numBinsZ; 
+
 
     if(verbose==1)
         cout << "drift velocity in middle: " << vD_middle << " mm/us";
     cout << endl;
     double keV = -999.;
     vector<double> migdalE = {0,0,0,0};
+
+    //this code generates header for output columns
     string corr="";
     string unit="[phd]";
     string header="E[keV]\t\t";
@@ -629,6 +627,7 @@ int main(int argc, char** argv)
     else 
         outStream << header << "\n";
 
+    // *** Main code loop for MC begins here ***
     unsigned long int numTrials=0;
         for ( unsigned long int j = 0; j < numEvents; j++) 
         {
@@ -1004,19 +1003,20 @@ int main(int argc, char** argv)
 
         }
 
-
+    //for spectra from a file we have the option of outputting exposure or effective exposure for given even sample
     if( type == "file" )
     {
         if( exposure == -1 && ratioEvents == 0)
-           outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
+            outStream << "effective exposure: " << numTrials/spec.spline_spectrum_prep.totRate << endl;
         else if( exposure == -1 && type == "file" && ratioEvents == 1)
-           outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
+            outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
         else if( exposure == -1 && type == "RNC" )
-           outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
+            outStream << "event efficiency ratio: " << (double)numEvents/numTrials << endl;
         else
             outStream << "exposure: " << exposure << endl;
     }
 
+    //output events binned in r and Z
     if(doBinning==1)
     {
         for(int l=0;l<numBinsZ;l++)
@@ -1039,6 +1039,8 @@ int main(int argc, char** argv)
     return 1;
 }
 
+
+//function for setting the detector parameters from a detector file
 void setDetectorPars(string detectorName, Detector_def *detector)
 {
     if(detectorName=="-1")
@@ -1141,6 +1143,7 @@ void setDetectorPars(string detectorName, Detector_def *detector)
 
 }
 
+//function for setting analysis parameters from an analysis file
 void setAnalysisPars(string analysisFilename)
 {
     if(analysisFilename=="-1")

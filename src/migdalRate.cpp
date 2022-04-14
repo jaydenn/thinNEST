@@ -13,28 +13,29 @@ using namespace std;
 double Z_nl_integrated(int N, int l, double Qe, double max_Ee);
 
 gsl_integration_workspace * W;
-double Leff = 0.15;
-double Mn = 939565.42;
-double AMU = Mn/1.00727;
-double MtXe = 131.29*931493;
-double Me = 510.999;
-double isoFracTable[7] = {0.0191421,0.283724,0.324514,0.536981,0.806574,0.911205,1};
-double isoTable[7] = {128,129,130,131,132,134,136};
-double nl_energy[6][5] = {{    -1,    -1,    -1,-1},
+
+//set some physical constants
+double Leff = 0.15;          //approximate quenching factor
+double Mn = 939565.42;       //neutron mass in keV
+double AMU = Mn/1.00727;     //1 atomic mass unit in keV
+double MtXe = 131.29*931493; //RAM of xenon in keV
+double Me = 510.999;         //electron mass
+double isoFracTable[7] = {0.0191421,0.283724,0.324514,0.536981,0.806574,0.911205,1}; //naturally occuring isotopic abundances of xenon
+double isoTable[7] = {128,129,130,131,132,134,136}; //atomic numbers of isotopes
+double nl_energy[6][5] = {{    -1,    -1,    -1,-1}, //the atomic binding energies of shells indexed by [n][l]
                           {    35,    -1,    -1,-1},    
                           {   5.4,   4.9,    -1,-1},
                           {   1.1,  0.93,  0.66,-1},
                           {   0.2,  0.14,6.1e-2,-1},
                           {2.1e-2,9.8e-3,    -1,-1},
-}; //energy levels for xenon
+}; 
+int Nlmax[6] = {-1,1,2,3,3,2}; 
 
-int Nlmax[6] = {-1,1,2,3,3,2};
-
+//setup interpolation objects
 gsl_spline *Znl_spline[6][3];
 gsl_interp_accel *Znl_accel[6][3];
 gsl_spline *Znl_int_spline[6][3];
 gsl_interp_accel *Znl_int_accel[6][3];
-
 gsl_spline *invZnl_int_spline[6][3];
 gsl_interp_accel *invZnl_int_accel[6][3];
 
@@ -88,6 +89,7 @@ double ERmaxNeutrinoEM(double Enu, double EM, double Mt)
     return pow(2.*Enu - EM,2)/(2.*(2.*Enu+Mt));
 }
 
+//calculate the total migdal probability for a given recoil
 double totalMigProb(double maxE, double ENR, double Mt, int mig_type)
 {
     double maxEM=0, maxEe=0;
@@ -114,6 +116,7 @@ double totalMigProb(double maxE, double ENR, double Mt, int mig_type)
     return prob;
 }
 
+//initialize the Migdal ionization probabilities (read in from file obtained from Ibe et al.)
 void init_Znl(double maxE, int mig_type, int migdalOptimize)
 {
     
@@ -215,6 +218,7 @@ void init_Znl(double maxE, int mig_type, int migdalOptimize)
 
 }
 
+//function for the ionization probabilities
 double Z_nl(int N, int l, double Qe, double Ee)
 {
     if ( Ee > 70 )
@@ -248,7 +252,6 @@ double invZ_nl_integrated(int N, int l, double Qe, double Znl)
     return gsl_spline_eval(invZnl_int_spline[N][l], Znl/pow((Qe / 0.001),2), invZnl_int_accel[N][l]);
 }
 
-
 //returns maximum diff probability of ionization for a given level
 double Znl_max(int N, int l, double Qe)
 {
@@ -280,52 +283,7 @@ double rand_xe_isotope(double ENR, double maxE, int mig_type)
         return 131.3; //in case something goes wrong
 }
 
-//Older (slower) Migdal calc
-vector<double> randAbs_migdalE(double ERnr, int mig_type, double monoE)
-{
-    
-    MtXe = AMU*rand_xe_isotope(ERnr, monoE, mig_type);
-    double maxEM=0;
-    if (mig_type == 1)
-        maxEM = EMmaxNeutronER(monoE,ERnr,MtXe);
-    if (mig_type == 2)
-        maxEM = EMmaxNeutrinoER(monoE,ERnr,MtXe);
-    if (mig_type == 3)
-        maxEM = 100;
-
-    double Ee,EeMax;
-
-    double t,prob=0;
-    double maxProb=totalMigProb(monoE, ERnr, MtXe, mig_type);
-
-    t = RandomGen::rndm()->rand_uniform();
-    if ( t < maxProb )
-    {
-        for(int N=1; N<6; N++)
-        {
-            for (int L=0; L<Nlmax[N]; L++)
-            {
-                EeMax = maxEM - nl_energy[N][L];
-                if (EeMax < 0)
-                    continue;
-                prob+=Z_nl_integrated(N,L,qe(ERnr,MtXe),EeMax);
-                if( t < prob )
-                {
-                    Ee = EeMax*RandomGen::rndm()->rand_uniform();
-                    while(RandomGen::rndm()->rand_uniform()*Znl_max(N, L, qe(ERnr,MtXe)) > Z_nl(N, L, qe(ERnr,MtXe), Ee))
-                    { 
-                        Ee = EeMax*RandomGen::rndm()->rand_uniform();
-                    }
-                    return {Ee,nl_energy[N][L],(double)N,MtXe/AMU};
-                }
-            }
-        }
-    }
-    return {0,0,0,0};
-
-}
-
-//eject a random electron? (proportional to prob)
+//eject a random electron? (proportional to prob) - main Migdal MC function
 vector<double> rand_migdalE(double ERnr, int mig_type, double maxE)
 {
     MtXe = AMU*131.3;
@@ -366,7 +324,7 @@ vector<double> rand_migdalE(double ERnr, int mig_type, double maxE)
 
 }
 
-
+//the following 3 functions are for numerical calculation of the Migdal spectrum
 double migdalIntegrand(double ErNR, void *pars)
 {
     TestSpectra::SPLINE_migdal_prep *migSpec = (TestSpectra::SPLINE_migdal_prep *) pars;
@@ -388,7 +346,7 @@ double migdalIntegrand(double ErNR, void *pars)
     return integrand * dRnr;
 }
 
-
+//differential Migdal spectrum
 double dRdEmigdalNeutron(double Edet, TestSpectra::SPLINE_migdal_prep *migSpec)
 {
     
@@ -421,6 +379,7 @@ double dRdEmigdalNeutron(double Edet, TestSpectra::SPLINE_migdal_prep *migSpec)
 
 }
 
+//calculate spectrum and write to file
 void calcMigdalSpectrum(TestSpectra::SPLINE_spectrum_prep *NRspec)
 {
     TestSpectra::SPLINE_migdal_prep migdalSpec;
