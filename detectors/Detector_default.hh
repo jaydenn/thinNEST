@@ -56,24 +56,24 @@ class Detector_def : public VDetector {
     // if you are getting warnings about being in gas, lower T and/or raise p
 
     // Data Analysis Parameters and Geometry
-    dtCntr = 822.;  // center of detector for S1 corrections, in usec.
-    dt_min = 75.8;  // minimum. Top of detector fiducial volume
-    dt_max = 1536.5; // maximum. Bottom of detector fiducial volume
+    dtCntr = 82.;  // center of detector for S1 corrections, in usec.
+    dt_min = 8;  // minimum. Top of detector fiducial volume
+    dt_max = 153.5; // maximum. Bottom of detector fiducial volume
 
-    radius = 1300.;  // millimeters (fiducial rad)
-    radmax = 1350.;  // actual physical geo. limit
+    radius = 130.;  // millimeters (fiducial rad)
+    radmax = 135.;  // actual physical geo. limit
 
-    TopDrift = 3005.;  // mm not cm or us (but, this *is* where dt=0)
+    TopDrift = 305.;  // mm not cm or us (but, this *is* where dt=0)
     // a z-axis value of 0 means the bottom of the detector (cathode OR bottom
     // PMTs)
     // In 2-phase, TopDrift=liquid/gas border. In gas detector it's GATE, not
     // anode!
-    anode = 3012.5;  // the level of the anode grid-wire plane in mm -Set from LZ
+    anode = 312.5;  // the level of the anode grid-wire plane in mm -Set from LZ
     // In a gas TPC, this is not TopDrift (top of drift region), but a few mm
     // above it
-    gate = 3000.;  // mm. This is where the E-field changes (higher) 
+    gate = 300.;  // mm. This is where the E-field changes (higher) 
     // in gas detectors, the gate is still the gate, but it's where S2 starts
-    cathode = 250;  // mm. Defines point below which events are gamma-X
+    cathode = 25;  // mm. Defines point below which events are gamma-X
 
     // 2-D (X & Y) Position Reconstruction
     PosResExp = 0.015;     // exp increase in pos recon res at hi r, 1/mm
