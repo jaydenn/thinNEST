@@ -58,7 +58,6 @@ int main(int argc, char** argv)
     int progress=0;
     int outputQuanta=0;
     int outputLindhard=0;
-    int optimizeROI=0;
     int doBinning=0;
     int usePosition=0;
     double wimpMass=1;
@@ -77,7 +76,6 @@ int main(int argc, char** argv)
         {"outputQuanta", no_argument,        0, 'q'},
         {"outLindhard",  no_argument,        0, 'l'},
         {"position",     no_argument,        0, 'p'},
-        {"optimizeROI",  no_argument,        0, 'O'},
         {"progress",     no_argument,        0, 'r'},
         {"numEvents",    required_argument,  0, 'n'},
         {"exposure",     required_argument,  0, 'N'},
@@ -129,9 +127,6 @@ int main(int argc, char** argv)
                 break;
             case 'p':
                 usePosition = 1;
-                break;
-            case 'O':
-                optimizeROI = 1;
                 break;
             case 'n':
                 numEvents = atoi(optarg);
