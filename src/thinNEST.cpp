@@ -27,13 +27,19 @@ int main(int argc, char** argv)
     //set some parameters that nest uses as input for it's yield calculations (these are default values from nest)
     vector<double> signalE, vTable, FreeParam,
     freeParamDef = {1,1,0.1,0.5,0.19,2.25},
-    freeParamBeta = {0.5,0.5,1.1,-5.,1.01,0.95,1.4e-2,1.8e-2},
+    freeParamBeta = {0.5,0.5,1.1,-5.,1.01,0.95,1.4e-2,1.8e-2};
+    
     // Fi, Fex, and 3 non-binomial recombination fluctuation parameters
-    NuisParam = {11.,1.1,0.0480,-0.0533,12.6,0.3,2.,0.3,2.,0.5,1., 1.};
+    //NuisParam = {11.,1.1,0.0480,-0.0533,12.6,0.3,2.,0.3,2.,0.5,1., 1.};
     // alpha,beta,gamma,delta,epsilon,zeta,eta,theta,iota for NR model
     // last 3 are the secret extra parameters for additional flexibility - all parameter values current as of 03/2022
 
-
+    //version 2.3.9 update
+    vector<double> NRYieldsParam =  {11., 1.1, 0.0480, -0.0533, 12.6, 0.3, 2., 0.3, 2., 0.5, 1., 1.},
+    NRERWidthsParam = {1.0,1.0, 0.1,0.5,0.19,2.25,0.0015,  0.0553,0.205, 0.45,-0.2},
+    LZ_NRERWidthsParam =     {0.4,0.4,0.04,0.5,0.19,2.25,0.0015,0.046452,0.205, 0.45,-0.2},
+    ERWeightParam;
+    
     //define a bunch of variables
     string position, delimiter, token;
     size_t loc;
@@ -223,6 +229,12 @@ int main(int argc, char** argv)
     // detector parameter modifications
     setDetectorPars(detectorName, detector);
     outStream << "using the " << (detectorName!="-1" ? detectorName : "default" ) << " detector file\n";
+
+    if(detectorName.find("LZ_SR1") != std::string::npos)
+    {    
+        NRERWidthsParam = LZ_NRERWidthsParam;
+        cout << "USING LZ WIDTH PARAMETERS\n";
+    }
     
     // analysis parameter modifications
     setAnalysisPars(analysisFilename);
@@ -486,7 +498,8 @@ int main(int argc, char** argv)
     
     //get work function based on density
     double Wq_eV = NESTcalc::WorkFunction(rho,detector->get_molarMass()).Wq_eV;  // out-of-sync danger: copied from NEST.cpp
-    
+    if(verbose==1)
+	cout << "Work function: " << Wq_eV << " eV\n"; 
     // Calculate and print g1, g2 parameters (once per detector)
     vector<double> g2_params = n.CalculateG2(verbosity);
     g2 = fabs(g2_params[3]);
@@ -496,16 +509,17 @@ int main(int argc, char** argv)
       2.;  // fid vol def usually shave more off the top, because of gas
            // interactions (100->10cm)
     double centralField = detector->FitEF(0.0, 0.0, centralZ);
-
+    massNum = detector->get_molarMass();
+    
     if (type_num == WIMP)
     {
         yieldsMax = n.GetYields(NR, 25.0, rho, centralField, double(massNum),
-                            double(atomNum), NuisParam);
+                            double(atomNum), NRYieldsParam);
     }
     else if (type_num == B8)
     {
         yieldsMax = n.GetYields(NR, 4.00, rho, centralField, double(massNum),
-                            double(atomNum), NuisParam);
+                            double(atomNum), NRYieldsParam);
     }
     else
     {
@@ -518,14 +532,14 @@ int main(int argc, char** argv)
         {            
             yieldsMax = n.GetYields(beta, energyMaximum, rho, centralField,
                               double(massNum), double(atomNum),
-                              NuisParam);  // the reason for this: don't do the
+                              NRYieldsParam);  // the reason for this: don't do the
                                            // special Kr stuff when just
                                            // checking max
         }
         else
         {
             yieldsMax = n.GetYields(type_num, energyMaximum, rho, centralField,
-                              double(massNum), double(atomNum), NuisParam);
+                              double(massNum), double(atomNum), NRYieldsParam);
         }
     }
     if ((g1 * yieldsMax.PhotonYield) > (2. * maxS1) && eMin != eMax)
@@ -536,7 +550,7 @@ int main(int argc, char** argv)
     double vD_middle;
     //for now dont support variable field
     if(inField == -1)
-        inField = detector->get_driftField();
+        inField = detector->FitEF(0,0,0);
     
     vD_middle = n.SetDriftVelocity(detector->get_T_Kelvin(), rho, inField);
     //if (inField == -1.)
@@ -570,7 +584,7 @@ int main(int argc, char** argv)
         cout << "drift velocity in middle: " << vD_middle << " mm/us";
     cout << endl;
     double keV = -999.;
-    vector<double> migdalE = {0,0,0,0};
+    vector<double> migdalE = {0,0,0,massNum};
 
     //this code generates header for output columns
     string corr="";
@@ -823,19 +837,18 @@ int main(int argc, char** argv)
 
                 if (keV > .001 * Wq_eV || migdalE[0] > 0) 
                 {
-                    
                     yields = n.GetYields(type_num, keV, rho, field, double(migdalE[3]),
-                                     double(atomNum), NuisParam);
-                    
+                                     double(atomNum), NRYieldsParam);
+
                     if (migdal == 1 && type_num == NR && migdalE[0] > 0)
                     { 
                         YieldResult yieldsMigE;   //migdal: ejected electron
                         YieldResult yieldsMigDex; //migdal: de-excite atom
                 
                         yieldsMigE = n.GetYields(beta, migdalE[0], rho, field, double(migdalE[3]),
-                                     double(atomNum), NuisParam);
+                                     double(atomNum), NRYieldsParam);
                         yieldsMigDex = n.GetYields(beta, migdalE[1], rho, field, double(migdalE[3]),
-                                     double(atomNum), NuisParam);
+                                     double(atomNum), NRYieldsParam);
                         
                         //As of version 2.3 this doesn't appear to be necessary
                         //if (int(migdalE[2]) == 2) //include this line for altering quanta from L-shell as observed in arXiv:2109.11487 
@@ -848,7 +861,7 @@ int main(int argc, char** argv)
                         yields.PhotonYield += yieldsMigE.PhotonYield + yieldsMigDex.PhotonYield;
                         yields.ElectronYield += yieldsMigE.ElectronYield + yieldsMigDex.ElectronYield;
                     }
-                    quanta = n.GetQuanta(yields, rho, FreeParam);
+                    quanta = n.GetQuanta(yields, rho, NRERWidthsParam, false, -999.);
                     if (spec.isLshell==1)                 
                     {    
                         cout << "not yet implemented\n";
