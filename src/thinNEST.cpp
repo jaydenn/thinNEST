@@ -8,7 +8,8 @@
 #include "NEST.hh"
 
 #include "TestSpectra.hh"
-#include "migdalRate.hh"
+#include "Target.hh"
+#include "PhysicalConstants.hh"
 #include "trigger.hh"
 
 #include "analysis_default.hh"
@@ -320,11 +321,11 @@ int main(int argc, char** argv)
         
         //extra options of the type of spectrum which can also affect calculation of the Migdal effect
         if (spec.spline_spectrum_prep.subType == "monoE")
-            mig_type = 1;
+            mig_type = NEUTRON;
         else if (spec.spline_spectrum_prep.subType == "neutrino")
-            mig_type = 2;
-        else if (spec.spline_spectrum_prep.subType == "wimp")
-            mig_type = 3;
+            mig_type = NEUTRINO;
+        else if (spec.spline_spectrum_prep.subType == "wimpNR")
+            mig_type = WIMPmig;
 
         if ( numEvents == 0 )
         {
@@ -447,11 +448,12 @@ int main(int argc, char** argv)
     }
 
     //if including the Migdal effect do some setup
+    Target myTarget( 54, mig_type, spec.spline_spectrum_prep.monoE, migdalOptimize);
     if (migdal==1)
     {
         spec.doMigdal = 1;
         cout << "initializing migdal calc.." << endl;
-        init_Znl(spec.spline_spectrum_prep.monoE, mig_type, migdalOptimize);
+        //init_Znl(spec.spline_spectrum_prep.monoE, mig_type, migdalOptimize);
         //optional output theoretical spectrum [currently turned off]
         //calcMigdalSpectrum(&(spec.spline_spectrum_prep));
     }
@@ -699,7 +701,7 @@ int main(int argc, char** argv)
                 }
             }
             if (migdal == 1 && type_num == NR)
-                migdalE = rand_migdalE(keV,mig_type,spec.spline_spectrum_prep.monoE);  // Returns tuple of [electron energy, binding energy of shell, shell index, mass number of recoiling xe atom]
+                migdalE = myTarget.rand_migdalE(keV);  // Returns tuple of [electron energy, binding energy of shell, shell index, mass number of recoiling xe atom]
         //EDITED for testing
         //if (migdalE[0]>0)
         //    outStream << keV << "  " << migdalE[0] << "  " << migdalE[1] << "  " << migdalE[2] << endl;

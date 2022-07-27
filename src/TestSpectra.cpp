@@ -598,6 +598,11 @@ TestSpectra::SPLINE_spectrum_prep TestSpectra::SPLINE_read_spectrum_file(const s
         RFF >> dummy >> spectrum.MFP; //mean free path in mm
         RFF >> dummy >> spectrum.beamWidth; //gaussian beam width in mm
     }
+    if (spectrum.type == "WIMP" )
+    {
+        spectrum.type = "NR";
+        RFF >> spectrum.subType >> spectrum.monoE;
+    }
     double* Er = new double[10000]();
     double* Rate = new double[10000]();
     
