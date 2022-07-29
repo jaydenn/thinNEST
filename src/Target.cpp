@@ -68,7 +68,7 @@ double Target::EMmaxER(double Ein, double ENR, double MT)
         case NEUTRINO:
             return Ein-ENR;
         case WIMPmig:
-            return sqrt(2*MT*pow(wimpVMAX,2))-ENR*(MT+wimpMass)/wimpMass;
+            return sqrt(2*MT*ENR*pow(wimpVMAX,2))-ENR*(MT+wimpMass)/wimpMass;
         default:
             return -1;
     }
@@ -267,6 +267,7 @@ double Target::Z_nl(int orbit_i, double v, double Ee)
 //eject a random electron? (proportional to prob) - main Migdal MC function
 vector<double> Target::rand_migdalE(double ENR)
 {
+    
     //select random isotope
     double MT = -1;
     if (isoN>1)
@@ -288,7 +289,6 @@ vector<double> Target::rand_migdalE(double ENR)
         for(int orbit_i=0; orbit_i<Norbits; orbit_i++)
         {
             EeMax = maxEM - orbits_energy[orbit_i];
-           
             if (EeMax < 0)
                 continue;
             prob+=Z_nl_integrated(orbit_i,Ve(ENR,MT),EeMax)/maxCumulativeProb;
